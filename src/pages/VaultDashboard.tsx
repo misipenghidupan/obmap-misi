@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Database, FolderOpen, ArrowLeft, RefreshCw, HardDrive, Zap, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { VaultCard } from "@/components/VaultCard";
 import { VaultBackupPanel } from "@/components/VaultBackupPanel";
-import { VaultBackupSettings } from "@/components/VaultBackupSettings";
+import { VaultBackupSettingsContent } from "@/components/VaultBackupSettings";
 import { DatabaseSettings } from "@/components/DatabaseSettings";
 import { VaultModeSelector } from "@/components/VaultModeSelector";
 import { ExportToFileSystem } from "@/components/ExportToFileSystem";
@@ -431,15 +432,20 @@ export default function VaultDashboard() {
       />
 
       {settingsVaultId && backupConfigs[settingsVaultId] && (
-        <VaultBackupSettings
-          vaultId={settingsVaultId}
-          config={backupConfigs[settingsVaultId]}
-          onSave={(config) => {
-            handleSaveBackupConfig(settingsVaultId, config);
-            setSettingsVaultId(null);
-          }}
-          trigger={<div />}
-        />
+        <Dialog open={!!settingsVaultId} onOpenChange={(open) => !open && setSettingsVaultId(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Backup Settings</DialogTitle>
+            </DialogHeader>
+            <VaultBackupSettingsContent
+              config={backupConfigs[settingsVaultId]}
+              onSave={(config) => {
+                handleSaveBackupConfig(settingsVaultId, config);
+                setSettingsVaultId(null);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
