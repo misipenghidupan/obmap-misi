@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
 import { AvatarUpload } from './AvatarUpload';
+import { ApiKeyManager } from './ApiKeyManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -175,6 +176,9 @@ export function ProfileSettings() {
           </form>
         </CardContent>
       </Card>
+
+      {/* API Keys */}
+      <ApiKeyManager />
 
       {/* Password Change */}
       <Card>
