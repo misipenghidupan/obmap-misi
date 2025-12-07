@@ -12,6 +12,12 @@ import { VaultBackupService } from './VaultBackupService';
 import { DatabaseSyncService } from '../database/DatabaseSyncService';
 import { FileSystemService } from '../persistence/FileSystemService';
 
+interface BackupConfig {
+  timeIntervalMinutes: number;
+  changeThreshold: number;
+  maxSnapshots: number;
+}
+
 interface Vault {
   id: string;
   name: string;
@@ -23,6 +29,7 @@ interface Vault {
   createdAt: number;
   lastModified: number;
   graphConfig?: any; // Per-vault graph configuration
+  backupConfig?: BackupConfig; // Per-vault backup configuration
 }
 
 export class VaultManager {
@@ -107,6 +114,7 @@ export class VaultManager {
       graphService,
       history,
       graphConfig: vaultData.graphConfig || null,
+      backupConfig: vaultData.backupConfig || null,
       createdAt: vaultData.metadata.createdAt,
       lastModified: vaultData.metadata.lastModified,
     };
@@ -352,6 +360,7 @@ export class VaultManager {
       graphData,
       history: vault.history.getState(),
       graphConfig: vault.graphConfig || undefined,
+      backupConfig: vault.backupConfig || undefined,
     });
   }
 
@@ -427,13 +436,29 @@ export class VaultManager {
   }
 
   getBackupConfig(vaultId: string) {
+    const vault = this.vaults.get(vaultId);
+    // Return per-vault config if available, otherwise get from backup service
+    if (vault?.backupConfig) {
+      return vault.backupConfig;
+    }
     return this.backupService.getConfig(vaultId);
   }
 
-  setBackupConfig(vaultId: string, config: any): void {
+  async setBackupConfig(vaultId: string, config: any): Promise<void> {
+    const vault = this.vaults.get(vaultId);
+    if (!vault) return;
+
+    // Store config in vault for persistence
+    vault.backupConfig = config;
+    vault.lastModified = Date.now();
+    
+    // Update backup service
     this.backupService.setConfig(vaultId, config);
     
-    // Restart auto backup
+    // Persist to storage
+    await this.persistVault(vault);
+    
+    // Restart auto backup with new config
     this.backupService.stopAutoBackup(vaultId);
     this.backupService.startAutoBackup(vaultId, async () => {
       await this.createBackup(vaultId);
