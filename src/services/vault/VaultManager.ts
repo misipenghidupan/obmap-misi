@@ -167,6 +167,9 @@ export class VaultManager {
       await persistenceService.readVaultStructure(result.handle);
       graphService.finalizeGraph();
 
+      // Read embedded vault config from .vault-config.json
+      const embeddedConfig = await persistenceService.readVaultConfig();
+
       const vault: Vault = {
         id: vaultId,
         name: result.vaultName,
@@ -177,6 +180,8 @@ export class VaultManager {
         directoryHandle: result.handle,
         createdAt: Date.now(),
         lastModified: Date.now(),
+        graphConfig: embeddedConfig?.graphConfig || null,
+        backupConfig: embeddedConfig?.backupConfig || null,
       };
 
       this.vaults.set(vaultId, vault);
@@ -376,7 +381,17 @@ export class VaultManager {
     
     vault.graphConfig = config;
     vault.lastModified = Date.now();
-    await this.persistVault(vault);
+
+    // For local-folder vaults, write to .vault-config.json in the vault directory
+    if (vault.type === 'local-folder' && vault.persistenceService) {
+      await vault.persistenceService.writeVaultConfig({
+        graphConfig: config,
+        backupConfig: vault.backupConfig || undefined,
+      });
+    } else {
+      // For in-memory vaults, persist to IndexedDB
+      await this.persistVault(vault);
+    }
   }
 
   async saveCurrentVault(): Promise<void> {
