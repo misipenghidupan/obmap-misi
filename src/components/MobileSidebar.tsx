@@ -8,10 +8,11 @@ interface Node {
   id: string;
   name: string;
   content: string;
-  type: "folder" | "file";
+  type: "folder" | "file" | "media";
   parentId: string | null;
   depth: number;
   tags: string[];
+  mediaType?: "image" | "audio" | "video";
 }
 
 interface MobileSidebarProps {
@@ -21,8 +22,10 @@ interface MobileSidebarProps {
   onNodeMove?: (nodeId: string, newParentId: string | null) => void;
   isVaultMode: boolean;
   vaultName: string | null;
+  vaultType?: 'in-memory' | 'local-folder';
   onCloseVault: () => void;
   graphConfigTrigger: React.ReactNode;
+  onImportComplete?: (importedNodes: Node[], updatedNodes?: Node[]) => void;
 }
 
 export function MobileSidebar({
@@ -32,8 +35,10 @@ export function MobileSidebar({
   onNodeMove,
   isVaultMode,
   vaultName,
+  vaultType,
   onCloseVault,
   graphConfigTrigger,
+  onImportComplete,
 }: MobileSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -61,8 +66,10 @@ export function MobileSidebar({
           onNodeMove={onNodeMove}
           isVaultMode={isVaultMode}
           vaultName={vaultName}
+          vaultType={vaultType}
           onCloseVault={onCloseVault}
           graphConfigTrigger={graphConfigTrigger}
+          onImportComplete={onImportComplete}
         />
       </SheetContent>
     </Sheet>

@@ -11,9 +11,10 @@ import { cn } from '@/lib/utils';
 interface Node {
   id: string;
   name: string;
-  type: "folder" | "file";
+  type: "folder" | "file" | "media";
   x?: number;
   y?: number;
+  mediaType?: "image" | "audio" | "video";
 }
 
 interface Link {
@@ -29,6 +30,53 @@ interface GraphMiniMapProps {
   fileColor?: string;
   linkColor?: string;
   selectedNodeId?: string | null;
+}
+
+// Resolve CSS variable colors to actual HSL values for canvas rendering
+function resolveColor(color: string): string {
+  // If it's already a resolved HSL/HSLA value (no CSS variables), return as-is
+  if (!color.includes('var(')) {
+    return color;
+  }
+  
+  // Extract the CSS variable name
+  const varMatch = color.match(/var\(--([^)]+)\)/);
+  if (!varMatch) return color;
+  
+  const varName = varMatch[1];
+  
+  // Get the computed value from CSS
+  const computedValue = getComputedStyle(document.documentElement)
+    .getPropertyValue(`--${varName}`)
+    .trim();
+  
+  if (!computedValue) return color;
+  
+  // Check if the computed value is HSL values (e.g., "270 70% 65%")
+  const hslMatch = computedValue.match(/^([\d.]+)\s+([\d.]+)%?\s+([\d.]+)%?$/);
+  if (hslMatch) {
+    return `hsl(${hslMatch[1]}, ${hslMatch[2]}%, ${hslMatch[3]}%)`;
+  }
+  
+  // Replace the var() with the actual value
+  return color.replace(`var(--${varName})`, computedValue);
+}
+
+// Convert color to HSLA with opacity for canvas
+function colorWithOpacity(color: string, opacity: number): string {
+  const resolved = resolveColor(color);
+  
+  // If already hsla, adjust opacity
+  if (resolved.startsWith('hsla(')) {
+    return resolved.replace(/,\s*[\d.]+\)$/, `, ${opacity})`);
+  }
+  
+  // If hsl, convert to hsla
+  if (resolved.startsWith('hsl(')) {
+    return resolved.replace('hsl(', 'hsla(').replace(')', `, ${opacity})`);
+  }
+  
+  return resolved;
 }
 
 export function GraphMiniMap({
@@ -86,7 +134,7 @@ export function GraphMiniMap({
     ctx.clearRect(0, 0, width, height);
 
     // Background
-    ctx.fillStyle = 'hsl(var(--card) / 0.95)';
+    ctx.fillStyle = colorWithOpacity(resolveColor('hsl(var(--card))'), 0.95);
     ctx.fillRect(0, 0, width, height);
 
     const bounds = getBounds();
@@ -102,7 +150,7 @@ export function GraphMiniMap({
     const offsetY = (height - graphHeight * scale) / 2 - bounds.minY * scale;
 
     // Draw links
-    ctx.strokeStyle = 'hsl(var(--muted-foreground) / 0.3)';
+    ctx.strokeStyle = colorWithOpacity(resolveColor('hsl(var(--muted-foreground))'), 0.3);
     ctx.lineWidth = 0.5;
     links.forEach(link => {
       const sourceNode = typeof link.source === 'string' 
@@ -132,11 +180,11 @@ export function GraphMiniMap({
       ctx.arc(x, y, nodeSize, 0, 2 * Math.PI);
       
       if (selectedNodeId === node.id) {
-        ctx.fillStyle = 'hsl(var(--accent))';
+        ctx.fillStyle = resolveColor('hsl(var(--accent))');
         ctx.shadowBlur = 6;
-        ctx.shadowColor = 'hsl(var(--accent))';
+        ctx.shadowColor = resolveColor('hsl(var(--accent))');
       } else {
-        ctx.fillStyle = node.type === 'folder' ? folderColor : fileColor;
+        ctx.fillStyle = resolveColor(node.type === 'folder' ? folderColor : fileColor);
         ctx.shadowBlur = 0;
       }
       
@@ -164,14 +212,14 @@ export function GraphMiniMap({
         const mapVpHeight = vpHeight * scale;
 
         // Draw viewport rectangle
-        ctx.strokeStyle = 'hsl(var(--primary))';
+        ctx.strokeStyle = resolveColor('hsl(var(--primary))');
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 2]);
         ctx.strokeRect(mapVpX, mapVpY, mapVpWidth, mapVpHeight);
         ctx.setLineDash([]);
 
         // Fill with semi-transparent
-        ctx.fillStyle = 'hsl(var(--primary) / 0.1)';
+        ctx.fillStyle = colorWithOpacity(resolveColor('hsl(var(--primary))'), 0.1);
         ctx.fillRect(mapVpX, mapVpY, mapVpWidth, mapVpHeight);
 
         setViewport({ x: vpX, y: vpY, width: vpWidth, height: vpHeight });
@@ -179,15 +227,22 @@ export function GraphMiniMap({
         // Ignore zoom errors
       }
     }
-
-    animationRef.current = requestAnimationFrame(render);
   }, [nodes, links, size, getBounds, folderColor, fileColor, selectedNodeId, graphRef]);
 
+  // Periodic render with throttling (not in render callback to avoid infinite loop)
   useEffect(() => {
-    if (isExpanded) {
+    if (!isExpanded) return;
+    
+    // Initial render
+    render();
+    
+    // Periodic updates for viewport tracking
+    const intervalId = setInterval(() => {
       render();
-    }
+    }, 100);
+    
     return () => {
+      clearInterval(intervalId);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
