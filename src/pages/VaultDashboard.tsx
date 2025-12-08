@@ -21,10 +21,13 @@ import { toast } from "sonner";
 import { getVaultManager } from "@/services/vault/VaultManagerSingleton";
 import { useAuth } from "@/hooks/useAuth";
 
+import { StorageStrategy } from "@/services/vault/types";
+
 interface Vault {
   id: string;
   name: string;
   type: 'in-memory' | 'local-folder';
+  storageStrategy: StorageStrategy;
   nodeCount: number;
   linkCount: number;
   lastModified: number;
@@ -86,6 +89,7 @@ export default function VaultDashboard() {
         id: v.id,
         name: v.name,
         type: v.type,
+        storageStrategy: v.storageStrategy,
         nodeCount: graphData.nodes.length,
         linkCount: graphData.links.length,
         lastModified: v.lastModified,
@@ -214,6 +218,12 @@ export default function VaultDashboard() {
   const handleSaveBackupConfig = async (vaultId: string, config: any) => {
     vaultManager.setBackupConfig(vaultId, config);
     await loadVaults();
+  };
+
+  const handleStorageStrategyChange = async (vaultId: string, strategy: StorageStrategy) => {
+    await vaultManager.setStorageStrategy(vaultId, strategy);
+    await loadVaults();
+    toast.success(`Storage strategy updated to "${strategy === 'cloud' ? 'Cloud Sync' : 'Local Only'}"`);
   };
 
   const handleSaveDatabaseConfig = async (config: any): Promise<boolean> => {
@@ -516,13 +526,16 @@ export default function VaultDashboard() {
                           id={vault.id}
                           name={vault.name}
                           type={vault.type}
+                          storageStrategy={vault.storageStrategy}
                           nodeCount={vault.nodeCount}
                           linkCount={vault.linkCount}
                           lastModified={vault.lastModified}
                           stats={vault.stats}
                           isActive={vault.id === activeVaultId}
+                          isAuthenticated={!!user}
                           onSelect={() => isCompareMode ? toggleVaultSelection(vault.id) : handleSelectVault(vault.id)}
                           onDelete={() => handleDeleteVault(vault.id)}
+                          onStorageStrategyChange={(strategy) => handleStorageStrategyChange(vault.id, strategy)}
                         />
                       </div>
 

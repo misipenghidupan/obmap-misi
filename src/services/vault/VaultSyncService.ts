@@ -3,11 +3,13 @@
  * 
  * Handles bidirectional sync between IndexedDB and Supabase with proper
  * conflict resolution and session-based data isolation.
+ * 
+ * IMPORTANT: Only syncs vaults with storageStrategy === 'cloud'
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { cloudVaultService, CloudVault } from './CloudVaultService';
-import { VaultManager } from './VaultManager';
+import { VaultManager, Vault } from './VaultManager';
 import type { Json } from '@/integrations/supabase/types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
@@ -59,7 +61,8 @@ export class VaultSyncService {
   }
 
   /**
-   * Sync all local vaults to cloud
+   * Sync all cloud-strategy vaults to cloud
+   * Only syncs vaults with storageStrategy === 'cloud'
    */
   async syncToCloud(vaultManager: VaultManager): Promise<SyncResult> {
     if (!navigator.onLine) {
@@ -75,20 +78,18 @@ export class VaultSyncService {
     this.setStatus('syncing');
 
     try {
-      const localVaults = vaultManager.getAllVaults();
+      // Only sync vaults with cloud strategy
+      const cloudVaults = vaultManager.getCloudVaults();
       let syncedCount = 0;
 
-      for (const vault of localVaults) {
+      for (const vault of cloudVaults) {
         if (vault.type !== 'in-memory') continue;
 
         const graphData = vault.graphService.getGraphData();
         
-        // Check if vault exists in cloud (by checking if ID is a UUID vs local format)
-        const isCloudVault = vault.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-        
-        if (isCloudVault) {
+        if (vault.cloudId) {
           // Update existing cloud vault
-          const { error } = await cloudVaultService.updateVault(vault.id, {
+          const { error } = await cloudVaultService.updateVault(vault.cloudId, {
             name: vault.name,
             graph_data: graphData,
             graph_config: vault.graphConfig || {},
@@ -111,6 +112,9 @@ export class VaultSyncService {
             console.error('Failed to create vault in cloud:', error);
             continue;
           }
+
+          // Store cloud ID locally
+          await vaultManager.setCloudId(vault.id, data.id);
 
           // Update vault config if exists
           if (vault.graphConfig || vault.backupConfig) {
@@ -136,7 +140,8 @@ export class VaultSyncService {
   }
 
   /**
-   * Pull vaults from cloud and merge with local
+   * Pull vaults from cloud
+   * Only imports vaults that don't already exist locally with cloud strategy
    */
   async syncFromCloud(vaultManager: VaultManager): Promise<SyncResult> {
     if (!navigator.onLine) {
@@ -160,34 +165,32 @@ export class VaultSyncService {
       }
 
       let syncedCount = 0;
+      const existingCloudIds = new Set(
+        vaultManager.getCloudVaults().map(v => v.cloudId).filter(Boolean)
+      );
 
       for (const cloudVault of cloudVaults) {
-        // Check if vault already exists locally
-        const localVault = vaultManager.getVault(cloudVault.id);
-        
-        if (!localVault) {
-          // Create local vault from cloud data
-          // We need to manually set up the vault since it comes from cloud
-          const graphData = cloudVault.graph_data || { nodes: [], links: [] };
-          
-          // Import the vault by creating a new one with the cloud ID
-          await this.importCloudVault(vaultManager, cloudVault);
-          syncedCount++;
-        } else {
-          // Vault exists - compare timestamps for conflict resolution
-          const cloudUpdated = new Date(cloudVault.updated_at).getTime();
-          const localUpdated = localVault.lastModified;
-          
-          if (cloudUpdated > localUpdated) {
-            // Cloud is newer - update local
-            const graphData = cloudVault.graph_data || { nodes: [], links: [] };
-            localVault.graphService.clearGraph();
-            graphData.nodes.forEach(node => localVault.graphService.setNode(node));
-            localVault.graphService.setLinks(graphData.links || []);
-            localVault.lastModified = cloudUpdated;
-            syncedCount++;
+        // Skip if vault already exists locally with this cloud ID
+        if (existingCloudIds.has(cloudVault.id)) {
+          // Update existing local vault if cloud is newer
+          const localVault = vaultManager.getCloudVaults().find(v => v.cloudId === cloudVault.id);
+          if (localVault) {
+            const cloudUpdated = new Date(cloudVault.updated_at).getTime();
+            if (cloudUpdated > localVault.lastModified) {
+              const graphData = cloudVault.graph_data || { nodes: [], links: [] };
+              localVault.graphService.clearGraph();
+              graphData.nodes.forEach(node => localVault.graphService.setNode(node));
+              localVault.graphService.setLinks(graphData.links || []);
+              localVault.lastModified = cloudUpdated;
+              syncedCount++;
+            }
           }
+          continue;
         }
+
+        // Import new cloud vault
+        await this.importCloudVault(vaultManager, cloudVault);
+        syncedCount++;
       }
 
       this.lastSyncTime = new Date();
@@ -202,15 +205,17 @@ export class VaultSyncService {
   }
 
   /**
-   * Import a cloud vault into the local VaultManager
+   * Import a cloud vault into the local VaultManager with cloud strategy
    */
   private async importCloudVault(vaultManager: VaultManager, cloudVault: CloudVault): Promise<void> {
-    // Access private method via creating in-memory and then updating
-    // This is a workaround - ideally VaultManager would expose a method for this
-    const vaultId = await vaultManager.createInMemoryVault(cloudVault.name);
+    // Create vault with cloud strategy
+    const vaultId = await vaultManager.createInMemoryVault(cloudVault.name, 'cloud');
     const vault = vaultManager.getVault(vaultId);
     
     if (vault) {
+      // Set cloud ID to link local and cloud vaults
+      await vaultManager.setCloudId(vaultId, cloudVault.id);
+      
       const graphData = cloudVault.graph_data || { nodes: [], links: [] };
       vault.graphService.clearGraph();
       graphData.nodes.forEach(node => vault.graphService.setNode(node));
@@ -226,7 +231,7 @@ export class VaultSyncService {
   }
 
   /**
-   * Full bidirectional sync
+   * Full bidirectional sync for cloud-strategy vaults only
    */
   async fullSync(vaultManager: VaultManager): Promise<SyncResult> {
     // First pull from cloud, then push local changes
@@ -240,7 +245,7 @@ export class VaultSyncService {
   }
 
   /**
-   * Sync a single vault to cloud
+   * Sync a single vault to cloud (only if it has cloud strategy)
    */
   async syncVaultToCloud(vaultManager: VaultManager, vaultId: string): Promise<SyncResult> {
     if (!navigator.onLine) {
@@ -257,12 +262,16 @@ export class VaultSyncService {
       return { success: false, error: 'Vault not found or not syncable' };
     }
 
+    // Check if vault has cloud strategy
+    if (vault.storageStrategy !== 'cloud') {
+      return { success: false, error: 'Vault is not configured for cloud sync. Change storage strategy to "Cloud Sync" first.' };
+    }
+
     try {
       const graphData = vault.graphService.getGraphData();
-      const isCloudVault = vault.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
       
-      if (isCloudVault) {
-        const { error } = await cloudVaultService.updateVault(vault.id, {
+      if (vault.cloudId) {
+        const { error } = await cloudVaultService.updateVault(vault.cloudId, {
           name: vault.name,
           graph_data: graphData,
           graph_config: vault.graphConfig || {},
@@ -282,6 +291,9 @@ export class VaultSyncService {
         if (error || !data) {
           return { success: false, error: error?.message || 'Failed to create vault' };
         }
+
+        // Store cloud ID
+        await vaultManager.setCloudId(vaultId, data.id);
 
         if (vault.graphConfig || vault.backupConfig) {
           await cloudVaultService.updateVault(data.id, {
