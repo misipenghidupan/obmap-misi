@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, Database, ArrowLeft, RefreshCw, HardDrive, Zap, 
-  BarChart3, Check, User, LogOut, Loader2
+  BarChart3, Check, User, LogOut, Loader2, Cloud
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VaultCard } from "@/components/VaultCard";
+import { VaultCardSkeleton } from "@/components/VaultCardSkeleton";
 import { VaultBackupPanel } from "@/components/VaultBackupPanel";
 import { VaultBackupSettingsContent } from "@/components/VaultBackupSettings";
 import { VaultComparisonView } from "@/components/VaultComparisonView";
@@ -16,10 +17,12 @@ import { VaultModeSelector } from "@/components/VaultModeSelector";
 import { ExportToFileSystem } from "@/components/ExportToFileSystem";
 import { ProfileSettings } from "@/components/profile/ProfileSettings";
 import { AvatarUpload } from "@/components/profile/AvatarUpload";
+import { SyncProgressBar } from "@/components/SyncProgressBar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getVaultManager } from "@/services/vault/VaultManagerSingleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useVaultSync } from "@/hooks/useVaultSync";
 
 import { StorageStrategy } from "@/services/vault/types";
 
@@ -48,6 +51,7 @@ export default function VaultDashboard() {
   const [backupConfigs, setBackupConfigs] = useState<Record<string, any>>({});
   const [settingsVaultId, setSettingsVaultId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   
   // Comparison mode state
@@ -58,6 +62,7 @@ export default function VaultDashboard() {
   const syncService = vaultManager.getSyncService();
   const navigate = useNavigate();
   const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { syncStatus, syncProgress, syncVaultToCloud, deleteCloudVault, isAuthenticated } = useVaultSync();
 
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -188,7 +193,16 @@ export default function VaultDashboard() {
 
   const handleDeleteVault = async (vaultId: string) => {
     if (confirm("Are you sure you want to delete this vault? All backups will also be deleted.")) {
-      await vaultManager.deleteVault(vaultId);
+      const { cloudId, wasCloudVault } = await vaultManager.deleteVault(vaultId);
+      
+      // If it was a cloud vault, also delete from cloud
+      if (wasCloudVault && cloudId && isAuthenticated) {
+        const result = await deleteCloudVault(cloudId);
+        if (!result.success) {
+          console.warn('Failed to delete cloud vault:', result.error);
+        }
+      }
+      
       await loadVaults();
       toast.success("Vault deleted");
     }
@@ -221,9 +235,20 @@ export default function VaultDashboard() {
   };
 
   const handleStorageStrategyChange = async (vaultId: string, strategy: StorageStrategy) => {
-    await vaultManager.setStorageStrategy(vaultId, strategy);
+    const { needsCloudSync } = await vaultManager.setStorageStrategy(vaultId, strategy);
     await loadVaults();
-    toast.success(`Storage strategy updated to "${strategy === 'cloud' ? 'Cloud Sync' : 'Local Only'}"`);
+    
+    // If set to cloud strategy and authenticated, sync immediately
+    if (needsCloudSync && isAuthenticated) {
+      const result = await syncVaultToCloud(vaultId);
+      if (result.success) {
+        toast.success(`Vault set to "Cloud Sync" and synced to cloud`);
+      } else {
+        toast.error(`Storage updated but sync failed: ${result.error}`);
+      }
+    } else {
+      toast.success(`Storage strategy updated to "${strategy === 'cloud' ? 'Cloud Sync' : 'Local Only'}"`);
+    }
   };
 
   const handleSaveDatabaseConfig = async (config: any): Promise<boolean> => {

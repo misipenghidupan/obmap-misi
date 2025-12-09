@@ -20,10 +20,19 @@ interface SyncResult {
   syncedVaults?: number;
 }
 
+interface SyncProgress {
+  total: number;
+  current: number;
+  message: string;
+}
+
 export class VaultSyncService {
   private syncStatus: SyncStatus = 'idle';
   private lastSyncTime: Date | null = null;
   private syncListeners: Set<(status: SyncStatus) => void> = new Set();
+  private progressListeners: Set<(progress: SyncProgress | null) => void> = new Set();
+  private currentProgress: SyncProgress | null = null;
+  private syncDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   /**
    * Get current sync status
@@ -40,6 +49,13 @@ export class VaultSyncService {
   }
 
   /**
+   * Get current sync progress
+   */
+  getProgress(): SyncProgress | null {
+    return this.currentProgress;
+  }
+
+  /**
    * Subscribe to sync status changes
    */
   onStatusChange(callback: (status: SyncStatus) => void): () => void {
@@ -47,9 +63,22 @@ export class VaultSyncService {
     return () => this.syncListeners.delete(callback);
   }
 
+  /**
+   * Subscribe to sync progress changes
+   */
+  onProgressChange(callback: (progress: SyncProgress | null) => void): () => void {
+    this.progressListeners.add(callback);
+    return () => this.progressListeners.delete(callback);
+  }
+
   private setStatus(status: SyncStatus) {
     this.syncStatus = status;
     this.syncListeners.forEach(cb => cb(status));
+  }
+
+  private setProgress(progress: SyncProgress | null) {
+    this.currentProgress = progress;
+    this.progressListeners.forEach(cb => cb(progress));
   }
 
   /**
@@ -310,9 +339,55 @@ export class VaultSyncService {
   }
 
   /**
+   * Delete a cloud vault
+   */
+  async deleteCloudVault(cloudId: string): Promise<SyncResult> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+      const { error } = await cloudVaultService.deleteVault(cloudId);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Debounced sync for a vault - auto-syncs after changes with delay
+   */
+  debouncedSyncVault(vaultManager: VaultManager, vaultId: string, delayMs: number = 2000): void {
+    // Clear existing timer for this vault
+    const existingTimer = this.syncDebounceTimers.get(vaultId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new timer
+    const timer = setTimeout(async () => {
+      this.syncDebounceTimers.delete(vaultId);
+      const result = await this.syncVaultToCloud(vaultManager, vaultId);
+      if (!result.success && result.error) {
+        console.warn(`Auto-sync failed for vault ${vaultId}:`, result.error);
+      }
+    }, delayMs);
+
+    this.syncDebounceTimers.set(vaultId, timer);
+  }
+
+  /**
    * Clear all local vault data (for logout)
    */
   async clearLocalData(): Promise<void> {
+    // Clear all pending sync timers
+    this.syncDebounceTimers.forEach(timer => clearTimeout(timer));
+    this.syncDebounceTimers.clear();
+
     // Clear IndexedDB vault data
     return new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase('VaultManagerDB');
