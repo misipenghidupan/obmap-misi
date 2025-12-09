@@ -157,11 +157,12 @@ export class VaultManager {
     }
   }
 
-  async setStorageStrategy(vaultId: string, strategy: StorageStrategy): Promise<void> {
+  async setStorageStrategy(vaultId: string, strategy: StorageStrategy): Promise<{ needsCloudSync: boolean; cloudId?: string }> {
     const vault = this.vaults.get(vaultId);
-    if (!vault) return;
+    if (!vault) return { needsCloudSync: false };
 
     const previousStrategy = vault.storageStrategy;
+    const previousCloudId = vault.cloudId;
     vault.storageStrategy = strategy;
     vault.lastModified = Date.now();
 
@@ -172,6 +173,12 @@ export class VaultManager {
 
     await this.persistVault(vault);
     console.log(`VaultManager: Changed vault ${vaultId} storage strategy from ${previousStrategy} to ${strategy}`);
+    
+    // Return whether we need to sync to cloud (newly set to cloud strategy)
+    return { 
+      needsCloudSync: strategy === 'cloud',
+      cloudId: previousCloudId
+    };
   }
 
   getStorageStrategy(vaultId: string): StorageStrategy | null {
@@ -268,9 +275,12 @@ export class VaultManager {
     return true;
   }
 
-  async deleteVault(vaultId: string): Promise<void> {
+  async deleteVault(vaultId: string): Promise<{ cloudId?: string; wasCloudVault: boolean }> {
     const vault = this.vaults.get(vaultId);
-    if (!vault) return;
+    if (!vault) return { wasCloudVault: false };
+
+    const wasCloudVault = vault.storageStrategy === 'cloud';
+    const cloudId = vault.cloudId;
 
     if (vault.persistenceService) {
       vault.persistenceService.closeVault();
@@ -286,6 +296,8 @@ export class VaultManager {
     if (this.activeVaultId === vaultId) {
       this.activeVaultId = null;
     }
+
+    return { cloudId, wasCloudVault };
   }
 
   getActiveVault(): Vault | null {
