@@ -7,12 +7,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { VaultCard } from "@/components/VaultCard";
-import { VaultBackupPanel } from "@/components/VaultBackupPanel";
-import { VaultBackupSettingsContent } from "@/components/VaultBackupSettings";
-import { VaultComparisonView } from "@/components/VaultComparisonView";
-import { VaultModeSelector } from "@/components/VaultModeSelector";
-import { ExportToFileSystem } from "@/components/ExportToFileSystem";
+import { VaultCard } from "@/components/vault/VaultCard";
+import { VaultBackupPanel } from "@/components/vault/VaultBackupPanel";
+import { VaultBackupSettingsContent } from "@/components/vault/VaultBackupSettings";
+import { VaultComparisonView } from "@/components/vault/VaultComparisonView";
+import { VaultModeSelector } from "@/components/vault/VaultModeSelector";
+import { ExportToFileSystem } from "@/components/vault/ExportToFileSystem";
 import { ProfileSettings } from "@/components/profile/ProfileSettings";
 import { AvatarUpload } from "@/components/profile/AvatarUpload";
 import { Badge } from "@/components/ui/badge";
