@@ -1,23 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  Plus, Database, ArrowLeft, RefreshCw, HardDrive, Zap, 
-  BarChart3, Check, User, LogOut, Loader2, Cloud
+  Plus, Database, ArrowLeft, HardDrive, Zap, 
+  BarChart3, User, LogOut, Loader2, Cloud, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VaultCard } from "@/components/VaultCard";
-import { VaultCardSkeleton } from "@/components/VaultCardSkeleton";
 import { VaultBackupPanel } from "@/components/VaultBackupPanel";
 import { VaultBackupSettingsContent } from "@/components/VaultBackupSettings";
 import { VaultComparisonView } from "@/components/VaultComparisonView";
-import { DatabaseSettings } from "@/components/DatabaseSettings";
 import { VaultModeSelector } from "@/components/VaultModeSelector";
 import { ExportToFileSystem } from "@/components/ExportToFileSystem";
 import { ProfileSettings } from "@/components/profile/ProfileSettings";
 import { AvatarUpload } from "@/components/profile/AvatarUpload";
-import { SyncProgressBar } from "@/components/SyncProgressBar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getVaultManager } from "@/services/vault/VaultManagerSingleton";
@@ -50,8 +47,6 @@ export default function VaultDashboard() {
   const [backups, setBackups] = useState<Record<string, any[]>>({});
   const [backupConfigs, setBackupConfigs] = useState<Record<string, any>>({});
   const [settingsVaultId, setSettingsVaultId] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   
   // Comparison mode state
@@ -59,7 +54,6 @@ export default function VaultDashboard() {
   const [selectedForComparison, setSelectedForComparison] = useState<Set<string>>(new Set());
   
   const vaultManager = getVaultManager();
-  const syncService = vaultManager.getSyncService();
   const navigate = useNavigate();
   const { user, profile, loading: authLoading, signOut } = useAuth();
   const { syncStatus, syncProgress, syncVaultToCloud, deleteCloudVault, isAuthenticated } = useVaultSync();
@@ -251,54 +245,6 @@ export default function VaultDashboard() {
     }
   };
 
-  const handleSaveDatabaseConfig = async (config: any): Promise<boolean> => {
-    const success = await syncService.setConfig(config);
-    if (success) {
-      toast.success('Database connected successfully');
-    }
-    return success;
-  };
-
-  const handleSyncToCloud = async () => {
-    if (!syncService.isConnected()) {
-      toast.error('No database connected. Configure database sync first.');
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      for (const vault of vaults) {
-        if (vault.type === 'in-memory') {
-          await vaultManager.syncVaultToCloud(vault.id);
-        }
-      }
-      toast.success('All vaults synced to cloud');
-    } catch (error) {
-      toast.error('Failed to sync vaults');
-      console.error('Sync error:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handlePullFromCloud = async () => {
-    if (!syncService.isConnected()) {
-      toast.error('No database connected. Configure database sync first.');
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      await vaultManager.pullVaultsFromCloud();
-      await loadVaults();
-      toast.success('Vaults pulled from cloud');
-    } catch (error) {
-      toast.error('Failed to pull vaults');
-      console.error('Pull error:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   const getVaultNodes = (vaultId: string) => {
     const vault = vaultManager.getVault(vaultId);
@@ -375,7 +321,7 @@ export default function VaultDashboard() {
 
       <main className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-xs grid-cols-2">
             <TabsTrigger value="profile" className="gap-2">
               <User className="w-4 h-4" />
               Profile
@@ -383,10 +329,6 @@ export default function VaultDashboard() {
             <TabsTrigger value="vaults" className="gap-2">
               <Database className="w-4 h-4" />
               Vaults
-            </TabsTrigger>
-            <TabsTrigger value="sync" className="gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Sync
             </TabsTrigger>
           </TabsList>
 
@@ -585,57 +527,6 @@ export default function VaultDashboard() {
                 </div>
               </div>
             )}
-          </TabsContent>
-
-          {/* Sync Tab */}
-          <TabsContent value="sync" className="space-y-6">
-            <div className="max-w-2xl mx-auto space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">Database Sync</h2>
-                <p className="text-sm text-muted-foreground">
-                  Connect to a database to sync your vaults across devices
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <DatabaseSettings
-                  onConfigSave={handleSaveDatabaseConfig}
-                  currentConfig={syncService.getConfig()}
-                  isConnected={syncService.isConnected()}
-                />
-
-                {syncService.isConnected() && (
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={handlePullFromCloud}
-                      disabled={isSyncing}
-                      className="flex-1"
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                      Pull from Cloud
-                    </Button>
-                    <Button
-                      onClick={handleSyncToCloud}
-                      disabled={isSyncing}
-                      className="flex-1"
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                      Push to Cloud
-                    </Button>
-                  </div>
-                )}
-
-                {!syncService.isConnected() && (
-                  <div className="bg-muted/30 border border-dashed border-border rounded-lg p-6 text-center">
-                    <Database className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Configure database settings above to enable cloud sync
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
           </TabsContent>
         </Tabs>
       </main>
