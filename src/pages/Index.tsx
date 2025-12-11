@@ -1,18 +1,18 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { NetworkGraph } from '@/components/NetworkGraph';
-import { NodePanel } from '@/components/NodePanel';
-import { AppSidebar } from '@/components/AppSidebar';
-import { MobileSidebar } from '@/components/MobileSidebar';
-import { ThemeCustomizer } from '@/components/ThemeCustomizer';
+import { NetworkGraph } from '@/components/graph/NetworkGraph';
+import { NodePanel } from '@/components/graph/NodePanel';
+import { AppSidebar } from '@/components/layout/AppSidebar';
+import { MobileSidebar } from '@/components/layout/MobileSidebar';
+import { ThemeCustomizer } from '@/components/common/ThemeCustomizer';
 import { GraphConfigPanel } from '@/components/GraphConfigPanel';
-import { VaultRequiredGate } from '@/components/VaultRequiredGate';
+import { VaultRequiredGate } from '@/components/vault/VaultRequiredGate';
 import {
 	PWAInstallPrompt,
 	PWAStatusBadge,
-} from '@/components/PWAInstallPrompt';
-import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
-import { OfflineIndicator } from '@/components/OfflineIndicator';
-import { AutoSaveIndicator, SaveStatus } from '@/components/AutoSaveIndicator';
+} from '@/components/common/PWAInstallPrompt';
+import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
+import { OfflineIndicator } from '@/components/sync/OfflineIndicator';
+import { AutoSaveIndicator, SaveStatus } from '@/components/sync/AutoSaveIndicator';
 import { Button } from '@/components/ui/button';
 import { Undo2, Redo2 } from 'lucide-react';
 import { toast } from 'sonner';
