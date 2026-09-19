@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { logCacheStatus } from "./utils/offlineStorage";
+import { bootstrapApp } from "@/app/bootstrap";
+import { logCacheStatus } from "@/core/persistence/offline-storage";
+
+bootstrapApp();
 
 console.log('main.tsx: Starting application render...');
 
@@ -21,6 +24,16 @@ try {
 
 // Log cache status for debugging in development
 if (import.meta.env.DEV) {
+  // Remove any dev service worker left over from a previous session: it keeps
+  // taking control and reloading the page, which throws away unsaved work.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => {
+        void registration.unregister();
+      });
+    });
+  }
+
   setTimeout(() => {
     logCacheStatus();
   }, 2000);
