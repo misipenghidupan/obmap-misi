@@ -1,14 +1,21 @@
 /**
  * Vault Types - Shared type definitions for vault system
+ *
+ * A vault has two independent settings:
+ * - location: where the notes physically live ('folder' on disk, or 'cloud')
+ * - cloudSync: whether the vault is mirrored to the user's cloud account
+ *
+ * So a folder vault can sync to the cloud, and a cloud vault can be attached
+ * to a folder on disk.
  */
 
-export type StorageStrategy = 'memory' | 'cloud' | 'filesystem';
+export type VaultLocation = 'folder' | 'cloud';
 
 export interface VaultMetadata {
   id: string;
   name: string;
-  type: 'in-memory' | 'local-folder';
-  storageStrategy: StorageStrategy;
+  location: VaultLocation;
+  cloudSync: boolean;
   createdAt: number;
   lastModified: number;
   nodeCount: number;
@@ -29,6 +36,23 @@ export interface VaultGraphConfig {
   forces?: any;
 }
 
+/** Contents of `<vault>/.obmap/*.json` — portable, isolated, per vault. */
+export interface ObmapVaultFile {
+  id: string;
+  name: string;
+  createdAt: number;
+  cloudSync: boolean;
+  cloudId?: string;
+}
+
+export interface ObmapConfig {
+  vault: ObmapVaultFile;
+  settings: Record<string, any>;
+  graph: VaultGraphConfig | null;
+  workspace: any | null;
+  backup?: BackupConfig | null;
+}
+
 export interface VaultData {
   metadata: VaultMetadata;
   graphData: {
@@ -41,16 +65,33 @@ export interface VaultData {
   };
   graphConfig?: VaultGraphConfig;
   backupConfig?: BackupConfig;
+  settings?: Record<string, any>;
+  workspaceLayout?: any;
 }
 
-export const STORAGE_STRATEGY_LABELS: Record<StorageStrategy, string> = {
-  memory: 'Local Only',
-  cloud: 'Cloud Sync',
-  filesystem: 'File System',
+export const VAULT_LOCATION_LABELS: Record<VaultLocation, string> = {
+  folder: 'Folder on this computer',
+  cloud: 'Cloud vault',
 };
 
-export const STORAGE_STRATEGY_DESCRIPTIONS: Record<StorageStrategy, string> = {
-  memory: 'Stored in browser, never syncs to cloud',
-  cloud: 'Auto-syncs to your cloud account',
-  filesystem: 'Stored in local folder on your computer',
+export const VAULT_LOCATION_DESCRIPTIONS: Record<VaultLocation, string> = {
+  folder: 'Notes are Markdown files inside a folder you choose',
+  cloud: 'Notes live in your account and follow you across devices',
 };
+
+/** Legacy storage strategy values, migrated on load. */
+export type LegacyStorageStrategy = 'memory' | 'cloud' | 'filesystem';
+
+export function migrateLegacyStrategy(
+  strategy: LegacyStorageStrategy | undefined,
+  legacyType: string | undefined
+): { location: VaultLocation; cloudSync: boolean } {
+  if (strategy === 'filesystem' || legacyType === 'local-folder') {
+    return { location: 'folder', cloudSync: false };
+  }
+  if (strategy === 'cloud') {
+    return { location: 'cloud', cloudSync: true };
+  }
+  // Browser-memory vaults become cloud-backed vaults; content is preserved.
+  return { location: 'cloud', cloudSync: true };
+}
