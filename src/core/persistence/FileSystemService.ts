@@ -1,15 +1,16 @@
 /**
  * Persistence Service - Filesystem-Native Layer
- * 
+ *
  * Responsibilities:
  * - Preserve vault integrity (folders + Markdown files)
- * - Provide lightweight CRUD operations
+ * - Provide lightweight CRUD operations against a real directory handle
  * - Emit domain events for Graph Service consumption
  * - Remain fully portable, no database required
  */
 
 import { eventBus, EventType } from '@/shared/events/events';
 import { backgroundSyncService } from '../sync/BackgroundSyncService';
+import { OBMAP_DIR } from '../vault/ObmapConfigService';
 
 export interface FileSystemNode {
   id: string;
@@ -19,18 +20,18 @@ export interface FileSystemNode {
   parentId: string | null;
 }
 
-// Event payload interfaces
 interface NoteSyncRequestedPayload {
   path: string[];
   content: string;
 }
+
+const isHidden = (name: string) => name.startsWith('.');
 
 export class FileSystemService {
   private vaultHandle: FileSystemDirectoryHandle | null = null;
   private nodeIdCounter = 0;
 
   constructor() {
-    // Listen for sync requests
     eventBus.subscribe<NoteSyncRequestedPayload>(EventType.NOTE_SYNC_REQUESTED, async (event) => {
       if (this.vaultHandle) {
         try {
@@ -42,27 +43,24 @@ export class FileSystemService {
     });
   }
 
-  /**
-   * Open a vault directory
-   */
+  /** Use an already-picked directory handle (no extra folder prompt). */
+  attach(handle: FileSystemDirectoryHandle): void {
+    this.vaultHandle = handle;
+    eventBus.emit(EventType.VAULT_OPENED, {
+      vaultName: handle.name,
+      rootHandle: handle,
+    });
+  }
+
+  /** Ask the user for a folder and use it as the vault root. */
   async openVault(): Promise<{
     vaultName: string;
     handle: FileSystemDirectoryHandle;
   } | null> {
     try {
       // @ts-ignore - File System Access API
-      const dirHandle = await window.showDirectoryPicker({
-        mode: 'readwrite',
-      });
-
-      this.vaultHandle = dirHandle;
-
-      // Emit vault opened event
-      eventBus.emit(EventType.VAULT_OPENED, {
-        vaultName: dirHandle.name,
-        rootHandle: dirHandle,
-      });
-
+      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      this.attach(dirHandle);
       return { vaultName: dirHandle.name, handle: dirHandle };
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -72,8 +70,22 @@ export class FileSystemService {
     }
   }
 
+  /** Re-request write permission for a handle restored from storage. */
+  async verifyPermission(handle?: FileSystemDirectoryHandle): Promise<boolean> {
+    const target = handle ?? this.vaultHandle;
+    if (!target) return false;
+    const anyHandle = target as any;
+    try {
+      if ((await anyHandle.queryPermission?.({ mode: 'readwrite' })) === 'granted') return true;
+      return (await anyHandle.requestPermission?.({ mode: 'readwrite' })) === 'granted';
+    } catch {
+      return false;
+    }
+  }
+
   /**
-   * Read vault structure and emit events for each discovered node
+   * Read vault structure and emit events for each discovered node.
+   * Hidden entries (including `.obmap`) are ignored.
    */
   async readVaultStructure(
     dirHandle: FileSystemDirectoryHandle
@@ -81,133 +93,202 @@ export class FileSystemService {
     const nodes: FileSystemNode[] = [];
     this.nodeIdCounter = 0;
 
-    const processDirectory = async (
+    const walk = async (
       handle: FileSystemDirectoryHandle,
       parentId: string | null,
       path: string[]
     ): Promise<void> => {
-      const folderId = `node-${this.nodeIdCounter++}`;
-
-      nodes.push({
-        id: folderId,
-        name: handle.name,
-        type: 'folder',
-        path: [...path, handle.name],
-        parentId,
-      });
-
-      // Emit folder created event
-      eventBus.emit(EventType.FOLDER_CREATED, {
-        id: folderId,
-        name: handle.name,
-        path: [...path, handle.name],
-        parentId,
-      });
-
       // @ts-ignore
       for await (const entry of handle.values()) {
+        if (isHidden(entry.name)) continue;
+
         if (entry.kind === 'directory') {
-          await processDirectory(entry, folderId, [...path, handle.name]);
+          const folderId = `node-${this.nodeIdCounter++}`;
+          nodes.push({
+            id: folderId,
+            name: entry.name,
+            type: 'folder',
+            path: [...path, entry.name],
+            parentId,
+          });
+          eventBus.emit(EventType.FOLDER_CREATED, {
+            id: folderId,
+            name: entry.name,
+            path: [...path, entry.name],
+            parentId,
+          });
+          await walk(entry, folderId, [...path, entry.name]);
         } else if (entry.kind === 'file' && entry.name.endsWith('.md')) {
           const fileId = `node-${this.nodeIdCounter++}`;
           const file = await entry.getFile();
           const content = await file.text();
-
           nodes.push({
             id: fileId,
-            name: entry.name.replace('.md', ''),
+            name: entry.name.replace(/\.md$/, ''),
             type: 'file',
-            path: [...path, handle.name, entry.name],
-            parentId: folderId,
+            path: [...path, entry.name],
+            parentId,
           });
-
-          // Emit note created event
           eventBus.emit(EventType.NOTE_CREATED, {
             id: fileId,
-            name: entry.name.replace('.md', ''),
+            name: entry.name.replace(/\.md$/, ''),
             content,
-            path: [...path, handle.name, entry.name],
-            parentId: folderId,
+            path: [...path, entry.name],
+            parentId,
           });
         }
       }
     };
 
-    const rootId = `node-${this.nodeIdCounter++}`;
-    nodes.push({
-      id: rootId,
-      name: dirHandle.name,
-      type: 'folder',
-      path: [dirHandle.name],
-      parentId: null,
-    });
-
-    // @ts-ignore
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'directory') {
-        await processDirectory(entry, rootId, [dirHandle.name]);
-      } else if (entry.kind === 'file' && entry.name.endsWith('.md')) {
-        const fileId = `node-${this.nodeIdCounter++}`;
-        const file = await entry.getFile();
-        const content = await file.text();
-
-        nodes.push({
-          id: fileId,
-          name: entry.name.replace('.md', ''),
-          type: 'file',
-          path: [dirHandle.name, entry.name],
-          parentId: rootId,
-        });
-
-        eventBus.emit(EventType.NOTE_CREATED, {
-          id: fileId,
-          name: entry.name.replace('.md', ''),
-          content,
-          path: [dirHandle.name, entry.name],
-          parentId: rootId,
-        });
-      }
-    }
-
+    await walk(dirHandle, null, []);
     return nodes;
   }
 
-  /**
-   * Save content to a file
-   */
+  /** Reads every Markdown file in the vault as `{ path, name, content }`. */
+  async readAllNotes(
+    dirHandle?: FileSystemDirectoryHandle
+  ): Promise<{ path: string[]; name: string; type: 'file' | 'folder'; content: string }[]> {
+    const root = dirHandle ?? this.vaultHandle;
+    if (!root) return [];
+    const out: { path: string[]; name: string; type: 'file' | 'folder'; content: string }[] = [];
+
+    const walk = async (handle: FileSystemDirectoryHandle, path: string[]) => {
+      // @ts-ignore
+      for await (const entry of handle.values()) {
+        if (isHidden(entry.name)) continue;
+        if (entry.kind === 'directory') {
+          out.push({ path: [...path, entry.name], name: entry.name, type: 'folder', content: '' });
+          await walk(entry, [...path, entry.name]);
+        } else if (entry.name.endsWith('.md')) {
+          const file = await entry.getFile();
+          out.push({
+            path: [...path, entry.name],
+            name: entry.name.replace(/\.md$/, ''),
+            type: 'file',
+            content: await file.text(),
+          });
+        }
+      }
+    };
+
+    await walk(root, []);
+    return out;
+  }
+
+  /** Ensure a nested folder exists; returns the deepest handle. */
+  async ensureDirectory(path: string[]): Promise<FileSystemDirectoryHandle | null> {
+    if (!this.vaultHandle) return null;
+    let current = this.vaultHandle;
+    for (const segment of path) {
+      try {
+        current = await current.getDirectoryHandle(segment, { create: true });
+      } catch (error) {
+        console.error('[FileSystemService] Cannot create folder', segment, error);
+        return null;
+      }
+    }
+    return current;
+  }
+
+  /** Write a note. `path` is relative to the vault root, file name included. */
+  async writeNote(path: string[], content: string): Promise<void> {
+    await this.saveFile(path, content);
+  }
+
   async saveFile(path: string[], content: string): Promise<void> {
     if (!this.vaultHandle) {
       throw new Error('No vault is currently open');
     }
 
-    // If offline, queue for background sync
     if (!navigator.onLine) {
-      console.log('[FileSystemService] Device offline, queuing change for sync');
       backgroundSyncService.queueChange(path, content);
       return;
     }
 
     try {
       const fileHandle = await this.getFileHandle(this.vaultHandle, path);
-      if (!fileHandle) {
-        throw new Error('Could not access file');
-      }
+      if (!fileHandle) throw new Error('Could not access file');
 
       const writable = await fileHandle.createWritable();
       await writable.write(content);
       await writable.close();
 
-      // Emit note updated event
-      eventBus.emit(EventType.NOTE_UPDATED, {
-        id: path.join('/'),
-        content,
-      });
+      eventBus.emit(EventType.NOTE_UPDATED, { id: path.join('/'), content });
     } catch (error) {
-      // If save fails, queue for retry
       console.error('[FileSystemService] Save failed, queuing for retry:', error);
       backgroundSyncService.queueChange(path, content);
       throw error;
     }
+  }
+
+  async deleteEntry(path: string[], type: 'file' | 'folder'): Promise<boolean> {
+    if (!this.vaultHandle || path.length === 0) return false;
+    try {
+      const parent = await this.getDirectoryHandle(path.slice(0, -1), false);
+      if (!parent) return false;
+      await parent.removeEntry(path[path.length - 1], { recursive: type === 'folder' });
+      return true;
+    } catch (error) {
+      console.error('[FileSystemService] Delete failed:', error);
+      return false;
+    }
+  }
+
+  /** Move / rename by copying to the new path then removing the old one. */
+  async moveEntry(
+    from: string[],
+    to: string[],
+    type: 'file' | 'folder'
+  ): Promise<boolean> {
+    if (!this.vaultHandle || from.length === 0 || to.length === 0) return false;
+    if (from.join('/') === to.join('/')) return true;
+
+    try {
+      if (type === 'file') {
+        const source = await this.getFileHandle(this.vaultHandle, from);
+        if (!source) return false;
+        const content = await (await source.getFile()).text();
+        await this.saveFile(to, content);
+      } else {
+        const sourceDir = await this.getDirectoryHandle(from, false);
+        if (!sourceDir) return false;
+        await this.copyDirectory(sourceDir, to);
+      }
+      await this.deleteEntry(from, type);
+      return true;
+    } catch (error) {
+      console.error('[FileSystemService] Move failed:', error);
+      return false;
+    }
+  }
+
+  private async copyDirectory(source: FileSystemDirectoryHandle, to: string[]): Promise<void> {
+    await this.ensureDirectory(to);
+    // @ts-ignore
+    for await (const entry of source.values()) {
+      if (entry.kind === 'directory') {
+        await this.copyDirectory(entry, [...to, entry.name]);
+      } else {
+        const content = await (await entry.getFile()).text();
+        await this.saveFile([...to, entry.name], content);
+      }
+    }
+  }
+
+  private async getDirectoryHandle(
+    path: string[],
+    create: boolean
+  ): Promise<FileSystemDirectoryHandle | null> {
+    if (!this.vaultHandle) return null;
+    let current = this.vaultHandle;
+    for (const segment of path) {
+      try {
+        current = await current.getDirectoryHandle(segment, { create });
+      } catch {
+        return null;
+      }
+    }
+    return current;
   }
 
   private async getFileHandle(
@@ -218,7 +299,7 @@ export class FileSystemService {
 
     for (let i = 0; i < path.length - 1; i++) {
       try {
-        currentHandle = await currentHandle.getDirectoryHandle(path[i]);
+        currentHandle = await currentHandle.getDirectoryHandle(path[i], { create: true });
       } catch {
         return null;
       }
@@ -243,38 +324,6 @@ export class FileSystemService {
     return this.vaultHandle;
   }
 
-  /**
-   * Read vault config from .vault-config.json
-   */
-  async readVaultConfig(): Promise<Record<string, any> | null> {
-    if (!this.vaultHandle) return null;
-
-    try {
-      const fileHandle = await this.vaultHandle.getFileHandle('.vault-config.json');
-      const file = await fileHandle.getFile();
-      const content = await file.text();
-      return JSON.parse(content);
-    } catch {
-      // File doesn't exist or can't be read
-      return null;
-    }
-  }
-
-  /**
-   * Write vault config to .vault-config.json
-   */
-  async writeVaultConfig(config: Record<string, any>): Promise<boolean> {
-    if (!this.vaultHandle) return false;
-
-    try {
-      const fileHandle = await this.vaultHandle.getFileHandle('.vault-config.json', { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(config, null, 2));
-      await writable.close();
-      return true;
-    } catch (error) {
-      console.error('[FileSystemService] Failed to write vault config:', error);
-      return false;
-    }
-  }
+  /** Folder name to skip when walking the tree. */
+  static readonly configDir = OBMAP_DIR;
 }
