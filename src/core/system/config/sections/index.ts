@@ -60,7 +60,7 @@ export function registerConfigSections(): void {
 
   registerConfigSection<EngineSnapshot>({
     id: "graph-engine",
-    label: "Graph layout engine",
+    label: "Graph engine options",
     version: 1,
     scope: "vault",
     read: readEngine,
