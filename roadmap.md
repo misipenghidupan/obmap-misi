@@ -15,3 +15,8 @@
 - [x] Remove hidden label-box geometry from shape-only graph nodes.
 - [x] Move cloud synchronization status into the workspace status bar.
 - [x] Simplify the workspace ribbon and add the collapsible universal Settings sidebar.
+- [ ] Add configurable animated node glow with reduced-motion support.
+- [ ] Merge graph search and filters, including a minimum/maximum depth range.
+- [ ] Expand Graph Options with force controls, glow, particles, and three label modes.
+- [ ] Add a shortcut from Graph Options to Visual Graph Engine settings.
+- [ ] Validate graph controls, rendering, persistence, and responsive layout.
