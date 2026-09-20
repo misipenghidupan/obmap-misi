@@ -35,6 +35,7 @@ export interface GraphCanvasProps {
   onNodeSelect: (node: Node | null) => void;
   graphConfig: GraphConfigState;
   search: string;
+  minDepth: number;
   maxDepth: number;
   contentFilter: string;
   tagFilter: string;
@@ -75,6 +76,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   onNodeSelect,
   graphConfig,
   search,
+  minDepth,
   maxDepth,
   contentFilter,
   tagFilter,
@@ -154,7 +156,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       .filter((node) => {
         if (hidden.has(node.id)) return false;
         if (focusSet && !focusSet.has(node.id)) return false;
-        if (node.depth > maxDepth) return false;
+        if (node.depth < minDepth || node.depth > maxDepth) return false;
         if (term && !node.name.toLowerCase().includes(term)) return false;
         if (content && !node.content.toLowerCase().includes(content)) return false;
         if (tag && !node.tags.some((item) => item.toLowerCase().replace(/^#/, '') === tag))
@@ -162,7 +164,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         return true;
       })
       .map((node) => node.id);
-  }, [projection, collapsedIds, focusedRootId, search, contentFilter, tagFilter, maxDepth]);
+  }, [projection, collapsedIds, focusedRootId, search, contentFilter, tagFilter, minDepth, maxDepth]);
 
   const geometry = useLayoutEngine(projection, {
     mode: layoutMode,
@@ -443,17 +445,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
       <GraphMiniMap
         nodes={data.nodes}
-        links={data.links}
-        graphRef={graphRef}
-        viewportWidth={size.width}
-        viewportHeight={size.height}
-        folderColor={theme.folder}
-        fileColor={theme.file}
-        linkColor={theme.link}
-        selectedNodeId={selectedNode?.id ?? null}
+        width={size.width}
+        height={size.height}
+        theme={theme}
       />
     </div>
   );
 });
-
-export default GraphCanvas;
