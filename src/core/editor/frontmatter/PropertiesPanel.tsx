@@ -594,7 +594,6 @@ const PropertyRow = ({
           />
         ) : property.type === "tags" || property.type === "list" ? (
           <ListValueInput
-            propertyKey={property.key}
             isTags={property.type === "tags"}
             values={toStringList(property.value)}
             suggestions={
