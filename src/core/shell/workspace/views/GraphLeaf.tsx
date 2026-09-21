@@ -73,9 +73,15 @@ function GraphLeafBody() {
         search={search}
         onSearchChange={setSearch}
         minDepth={minDepth}
-        onMinDepthChange={setMinDepth}
+        onMinDepthChange={(value) => {
+          setMinDepth(value);
+          if (value > maxDepth) setMaxDepth(value);
+        }}
         maxDepth={maxDepth}
-        onMaxDepthChange={setMaxDepth}
+        onMaxDepthChange={(value) => {
+          setMaxDepth(value);
+          if (value < minDepth) setMinDepth(value);
+        }}
         contentFilter={contentFilter}
         onContentFilterChange={setContentFilter}
         tagFilter={tagFilter}

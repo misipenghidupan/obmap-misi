@@ -1,7 +1,7 @@
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
-import { Slider } from '@/shared/ui/slider';
+import { Slider } from "@/shared/ui/slider-number";
 import { Switch } from '@/shared/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/ui/tooltip';
 import { cn } from '@/shared/lib/cn';
@@ -23,6 +23,15 @@ import {
 import { useState } from 'react';
 import type { LayoutMode, MindmapOrientation } from './model/graphTypes';
 import { useWorkspaceStore } from '../shell/workspace/store/useWorkspaceStore';
+import { useGraphStore } from '@/shared/stores';
+
+type LabelMode = 'nodes' | 'labels' | 'boxes';
+
+const LABEL_MODES: { value: LabelMode; label: string }[] = [
+  { value: 'nodes', label: 'Nodes' },
+  { value: 'labels', label: '+ Labels' },
+  { value: 'boxes', label: '+ Boxes' },
+];
 
 const LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
   { value: 'mindmap', label: 'Mindmap', icon: GitBranch },
@@ -83,6 +92,30 @@ export function GraphWorkspaceControls({
   onSmartZoom,
 }: GraphWorkspaceControlsProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
+  const config = useGraphStore((state) => state.config);
+  const updateNodeConfig = useGraphStore((state) => state.updateNodeConfig);
+  const updateLinkConfig = useGraphStore((state) => state.updateLinkConfig);
+  const updateForceConfig = useGraphStore((state) => state.updateForceConfig);
+
+  const labelMode: LabelMode = !config.nodes.showLabels
+    ? 'nodes'
+    : config.nodes.labelBox
+      ? 'boxes'
+      : 'labels';
+
+  const setLabelMode = (mode: LabelMode) => {
+    if (mode === 'nodes') updateNodeConfig({ showLabels: false, labelBox: false });
+    else if (mode === 'labels') updateNodeConfig({ showLabels: true, labelBox: false });
+    else updateNodeConfig({ showLabels: true, labelBox: true });
+  };
+
+  const toggleParticles = (enabled: boolean) => {
+    updateLinkConfig({
+      showParticles: enabled,
+      ...(enabled && config.links.particles < 1 ? { particles: 2 } : {}),
+      ...(enabled && config.links.particleSpeed <= 0 ? { particleSpeed: 0.01 } : {}),
+    });
+  };
   const filterCount = 
     Number(minDepth > 0) + 
     Number(maxDepth < 10) + 
@@ -247,6 +280,151 @@ export function GraphWorkspaceControls({
                       onCheckedChange={onHighlightPathwayChange}
                     />
                   </div>
+
+
+                  <div className="space-y-3 border-t pt-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Label mode</Label>
+                      <div className="grid grid-cols-3 gap-1">
+                        {LABEL_MODES.map((item) => (
+                          <Button
+                            key={item.value}
+                            type="button"
+                            variant={labelMode === item.value ? 'secondary' : 'outline'}
+                            className="h-8 px-1 text-[11px]"
+                            onClick={() => setLabelMode(item.value)}
+                          >
+                            {item.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="graph-glow" className="text-xs">Glowing nodes</Label>
+                      <Switch
+                        id="graph-glow"
+                        checked={config.nodes.glow}
+                        onCheckedChange={(checked) => updateNodeConfig({ glow: checked })}
+                      />
+                    </div>
+
+                    {config.nodes.glow && (
+                      <div className="space-y-3 rounded-md bg-secondary/40 p-2.5">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Glow intensity</span>
+                            <span>{config.nodes.glowIntensity.toFixed(2)}</span>
+                          </div>
+                          <Slider
+                            value={[config.nodes.glowIntensity]}
+                            min={0.1}
+                            max={1}
+                            step={0.05}
+                            onValueChange={([value]) => updateNodeConfig({ glowIntensity: value })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Pulse speed</span>
+                            <span>{config.nodes.glowSpeed === 0 ? 'Static' : config.nodes.glowSpeed.toFixed(1) + 'x'}</span>
+                          </div>
+                          <Slider
+                            value={[config.nodes.glowSpeed]}
+                            min={0}
+                            max={3}
+                            step={0.1}
+                            onValueChange={([value]) => updateNodeConfig({ glowSpeed: value })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="graph-particles" className="text-xs">Particle animation</Label>
+                      <Switch
+                        id="graph-particles"
+                        checked={config.links.showParticles}
+                        onCheckedChange={toggleParticles}
+                      />
+                    </div>
+
+                    {config.links.showParticles && (
+                      <div className="space-y-3 rounded-md bg-secondary/40 p-2.5">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Particles per link</span>
+                            <span>{config.links.particles}</span>
+                          </div>
+                          <Slider
+                            value={[config.links.particles]}
+                            min={1}
+                            max={6}
+                            step={1}
+                            onValueChange={([value]) => updateLinkConfig({ particles: value })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Particle speed</span>
+                            <span>{config.links.particleSpeed.toFixed(3)}</span>
+                          </div>
+                          <Slider
+                            value={[config.links.particleSpeed]}
+                            min={0.002}
+                            max={0.05}
+                            step={0.002}
+                            onValueChange={([value]) => updateLinkConfig({ particleSpeed: value })}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {layout === 'free-force' && (
+                    <div className="space-y-3 border-t pt-3">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Physics &amp; forces</Label>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Repulsion</span>
+                          <span>{config.forces.chargeStrength}</span>
+                        </div>
+                        <Slider
+                          value={[config.forces.chargeStrength]}
+                          min={-1200}
+                          max={-20}
+                          step={20}
+                          onValueChange={([value]) => updateForceConfig({ chargeStrength: value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Link distance</span>
+                          <span>{config.forces.linkDistance}</span>
+                        </div>
+                        <Slider
+                          value={[config.forces.linkDistance]}
+                          min={20}
+                          max={400}
+                          step={5}
+                          onValueChange={([value]) => updateForceConfig({ linkDistance: value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Centering</span>
+                          <span>{config.forces.centerStrength.toFixed(2)}</span>
+                        </div>
+                        <Slider
+                          value={[config.forces.centerStrength]}
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          onValueChange={([value]) => updateForceConfig({ centerStrength: value })}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {(collapsedCount > 0 || focused) && (
                     <Button
