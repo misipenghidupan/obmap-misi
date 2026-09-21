@@ -487,12 +487,10 @@ const PropertyRow = ({
   const [keyDraft, setKeyDraft] = useState(property.key);
   useEffect(() => setKeyDraft(property.key), [property.key]);
 
-  const valueSuggestions = useMemo(() => {
-    const fromRule = (((rule as any)?.options ?? []) as string[]) ?? [];
-    return [...fromRule, ...optionsForKey(nodes, property.key)];
-  }, [rule, nodes, property.key]);
-
-
+  const valueSuggestions = useMemo(
+    () => optionsForKey(nodes, property.key),
+    [nodes, property.key],
+  );
   return (
     <div
       className={cn(
@@ -544,14 +542,14 @@ const PropertyRow = ({
         </DropdownMenu>
 
         {/* Key Name Input */}
-        <Input
-          defaultValue={property.key}
-          key={`${property.key}-key`}
+        <SuggestInput
+          value={keyDraft}
+          onChange={setKeyDraft}
+          onCommit={(next) => actions.renameKey(property.key, next)}
+          suggestions={keySuggestions.filter(
+            (key) => key.toLowerCase() !== property.key.toLowerCase(),
+          )}
           readOnly={reserved}
-          onBlur={(e) => actions.renameKey(property.key, e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-          }}
           className="h-6 w-full truncate border-none bg-transparent px-1 text-xs text-muted-foreground shadow-none focus-visible:ring-0 focus-visible:text-foreground"
         />
 
@@ -575,15 +573,24 @@ const PropertyRow = ({
             propertyKey={property.key}
             isTags={property.type === "tags"}
             values={toStringList(property.value)}
-            suggestions={property.type === "tags" ? knownTags : []}
+            suggestions={
+              property.type === "tags" ? knownTags : valueSuggestions
+            }
             onChange={(next) => actions.updateValue(property.key, next)}
           />
         ) : property.type === "select" ? (
-          <SelectValueInput
-            propertyKey={property.key}
+          <SuggestInput
             value={String(property.value ?? "")}
-            options={optionsForKey(nodes, property.key)}
+            suggestions={valueSuggestions}
             onChange={(next) => actions.updateValue(property.key, next)}
+            placeholder="Empty"
+          />
+        ) : property.type === "text" ? (
+          <SuggestInput
+            value={String(property.value ?? "")}
+            suggestions={valueSuggestions}
+            onChange={(next) => actions.updateValue(property.key, next)}
+            placeholder="Empty"
           />
         ) : (
           <Input
@@ -636,26 +643,6 @@ function optionsForKey(nodes: { content: string }[], key: string): string[] {
   });
   return Array.from(set).filter(Boolean).sort();
 }
-
-const SelectValueInput = ({ propertyKey, value, options, onChange }: any) => {
-  const listId = `select-${propertyKey}`;
-  return (
-    <>
-      <Input
-        list={listId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Empty"
-        className="h-6 w-full border-none bg-transparent px-2 text-xs shadow-none placeholder:text-muted-foreground/40 hover:bg-black/5 dark:hover:bg-white/5 focus-visible:bg-black/5 dark:focus-visible:bg-white/5 focus-visible:ring-0"
-      />
-      <datalist id={listId}>
-        {options.map((o: string) => (
-          <option key={o} value={o} />
-        ))}
-      </datalist>
-    </>
-  );
-};
 
 const ListValueInput = ({ isTags, values, suggestions, onChange }: any) => {
   const [draft, setDraft] = useState("");
