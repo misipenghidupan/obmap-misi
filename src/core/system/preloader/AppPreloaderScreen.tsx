@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { runModulePreloader, PreloadProgressState, ModuleCategory } from './modulePreloader';
+import { 
+  runModulePreloader, 
+  preloadRegistry, 
+  PreloadProgressState, 
+  ModuleCategory 
+} from './modulePreloader';
 import { Badge } from '@/shared/ui/badge';
 import { ScrollArea } from '@/shared/ui/scroll-area';
 import { CheckCircle2, Clock, HardDrive, Cpu, Layers } from 'lucide-react';
@@ -18,18 +23,19 @@ interface AppPreloaderScreenProps {
 }
 
 export const AppPreloaderScreen: React.FC<AppPreloaderScreenProps> = ({ onLoaded }) => {
-  const [state, setState] = useState<PreloadProgressState>({
+  const [state, setState] = useState<PreloadProgressState>(() => ({
     currentIndex: 0,
-    totalModules: 30,
-    currentModuleName: 'Inisialisasi Preloader...',
+    totalModules: preloadRegistry.getTotal(), // <-- Dinamis mengikuti registry aktual
+    currentModuleName: 'Menginisialisasi Registry Modul...',
     currentCategory: 'system',
+    currentStage: 'resolving',
     overallPercent: 0,
     currentModulePercent: 0,
     completed: [],
     slowestModule: null,
     heaviestModule: null,
     isComplete: false,
-  });
+  }));
 
   useEffect(() => {
     let mounted = true;
@@ -49,6 +55,15 @@ export const AppPreloaderScreen: React.FC<AppPreloaderScreenProps> = ({ onLoaded
       mounted = false;
     };
   }, [onLoaded]);
+
+  // Pada render detail modul yang sedang aktif:
+  // Tampilkan tahap presisi (Stage) alih-alih angka acak
+  const stageLabels = {
+    resolving: 'Resolving Chunk & Dependency',
+    evaluating: 'Evaluating & Initializing Scope',
+    verifying: 'Verifying Module Export Tree',
+    ready: 'Module Ready',
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md p-6 select-none font-sans text-foreground">
@@ -73,6 +88,20 @@ export const AppPreloaderScreen: React.FC<AppPreloaderScreenProps> = ({ onLoaded
             </p>
           </div>
         </div>
+
+            {/* Total Progress Bar dengan 1 desimal presisi */}
+    <span className="tabular-nums font-mono text-primary font-bold">
+      {state.overallPercent.toFixed(1)}%
+    </span>
+    {/* Current Module Stage & Persentase */}
+    <div className="flex justify-between items-center text-xs">
+      <span className="text-muted-foreground font-mono text-[11px]">
+        {stageLabels[state.currentStage]}
+      </span>
+      <span className="font-mono tabular-nums text-foreground">
+        {state.currentModulePercent}%
+      </span>
+    </div>
 
         {/* 1. Overall Progress Bar */}
         <div className="space-y-2">

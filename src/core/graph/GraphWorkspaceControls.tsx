@@ -1,30 +1,38 @@
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
-import { Slider } from "@/shared/ui/slider-noinput";
+import { Slider } from '@/shared/ui/slider-noinput';
 import { Switch } from '@/shared/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { cn } from '@/shared/lib/cn';
 import {
+  BarChart3,
+  Circle,
   Clock3,
-  Filter,
   Focus,
   Frame,
   GitBranch,
+  Globe,
+  Link2,
   Network,
+  Pause,
+  Play,
   RotateCcw,
   Search,
+  Settings2,
   SlidersHorizontal,
   Sparkles,
   UnfoldVertical,
   X,
-  Settings,
+  Zap,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { LayoutMode, MindmapOrientation } from './model/graphTypes';
-import { useWorkspaceStore } from '../shell/workspace/store/useWorkspaceStore';
 import { useGraphStore } from '@/shared/stores';
+import { useGraphInteractionStore } from './model/useGraphInteractionStore';
 
+type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';
 
 const LABEL_MODES: { value: LabelMode; label: string }[] = [
@@ -40,7 +48,21 @@ const LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
   { value: 'fishbone', label: 'Fishbone', icon: SlidersHorizontal },
 ];
 
-type Panel = 'options' | 'search-filters';
+const NODE_SHAPES = [
+  { value: 'circle', label: 'Circle' },
+  { value: 'square', label: 'Square' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'hexagon', label: 'Hexagon' },
+];
+
+const DAG_MODES = [
+  { value: 'null', label: 'None (Organic)' },
+  { value: 'td', label: 'Top-Down' },
+  { value: 'bu', label: 'Bottom-Up' },
+  { value: 'lr', label: 'Left-Right' },
+  { value: 'radialin', label: 'Radial In' },
+  { value: 'radialout', label: 'Radial Out' },
+];
 
 export type SmartZoomAction = 'fit' | 'selection' | 'reset';
 
@@ -91,11 +113,30 @@ export function GraphWorkspaceControls({
   onTagFilterChange,
   onSmartZoom,
 }: GraphWorkspaceControlsProps) {
-  const [panel, setPanel] = useState<Panel | null>(null);
-  const config = useGraphStore((state) => state.config);
-  const updateNodeConfig = useGraphStore((state) => state.updateNodeConfig);
-  const updateLinkConfig = useGraphStore((state) => state.updateLinkConfig);
-  const updateForceConfig = useGraphStore((state) => state.updateForceConfig);
+  // Kontrol gear: toggle menu icon button ke bawah
+  const [isGearOpen, setIsGearOpen] = useState(true);
+  const [activePanel, setActivePanel] = useState<SettingGroup | null>(null);
+
+  const config = useGraphStore((s) => s.config);
+  const stats = useGraphStore((s) => s.stats);
+  const updateNodeConfig = useGraphStore((s) => s.updateNodeConfig);
+  const updateLinkConfig = useGraphStore((s) => s.updateLinkConfig);
+  const updateForceConfig = useGraphStore((s) => s.updateForceConfig);
+  const resetConfig = useGraphStore((s) => s.resetConfig);
+
+  const requestReheat = useGraphInteractionStore((s) => s.requestReheat);
+  const requestStop = useGraphInteractionStore((s) => s.requestStop);
+
+  const filterCount =
+    Number(minDepth > 0) +
+    Number(maxDepth < 10) +
+    Number(Boolean(search)) +
+    Number(Boolean(contentFilter)) +
+    Number(Boolean(tagFilter));
+
+  const togglePanel = (group: SettingGroup) => {
+    setActivePanel((curr) => (curr === group ? null : group));
+  };
 
   const labelMode: LabelMode = !config.nodes.showLabels
     ? 'nodes'
@@ -109,104 +150,183 @@ export function GraphWorkspaceControls({
     else updateNodeConfig({ showLabels: true, labelBox: true });
   };
 
-  const toggleParticles = (enabled: boolean) => {
-    updateLinkConfig({
-      showParticles: enabled,
-      ...(enabled && config.links.particles < 1 ? { particles: 2 } : {}),
-      ...(enabled && config.links.particleSpeed <= 0 ? { particleSpeed: 0.01 } : {}),
-    });
-  };
-  const filterCount =
-    Number(minDepth > 0) +
-    Number(maxDepth < 10) +
-    Number(Boolean(search)) +
-    Number(Boolean(contentFilter)) +
-    Number(Boolean(tagFilter));
-
-  const togglePanel = (next: Panel) => setPanel((current) => current === next ? null : next);
-
-  const openSettings = () => {
-    useWorkspaceStore.getState().openView({
-      type: 'settings',
-      settingsSection: 'graph',
-      title: 'Settings'
-    });
-    setPanel(null);
-  };
-
   return (
-    <TooltipProvider delayDuration={250}>
-      <div className="pointer-events-none absolute right-2 top-2 z-40 flex flex-row-reverse items-start gap-2 sm:right-4 sm:top-4">
-        <div className="flex w-11 flex-col gap-2">
-          <div className="pointer-events-auto flex flex-col items-center gap-1 rounded-md border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
+    <TooltipProvider delayDuration={200}>
+      <div className="pointer-events-none absolute right-2 top-2 z-40 flex flex-row-reverse items-start gap-2.5 sm:right-4 sm:top-4">
+        {/* Kolom Tombol Floating Toolbar */}
+        <div className="flex w-11 flex-col items-center gap-2">
+          {/* Main Gear Button */}
+          <div className="pointer-events-auto flex flex-col items-center rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
-                  variant={panel === 'options' ? 'secondary' : 'ghost'}
+                  variant={isGearOpen ? 'secondary' : 'ghost'}
                   size="icon"
-                  className="h-9 w-9"
-                  aria-label="Graph options"
-                  aria-pressed={panel === 'options'}
-                  onClick={() => togglePanel('options')}
+                  className={cn('relative h-9 w-9 transition-transform duration-200', isGearOpen && 'rotate-45')}
+                  aria-label="Toggle Graph Settings Menu"
+                  onClick={() => {
+                    setIsGearOpen((prev) => !prev);
+                    if (isGearOpen) setActivePanel(null);
+                  }}
                 >
-                  <Network className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">Graph options</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant={panel === 'search-filters' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className={cn('relative h-9 w-9', filterCount > 0 && 'text-primary')}
-                  aria-label="Search and filters"
-                  aria-pressed={panel === 'search-filters'}
-                  onClick={() => togglePanel('search-filters')}
-                >
-                  <Search className="h-4 w-4" />
-                  {filterCount > 0 && (
-                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                  <Settings2 className="h-4 w-4" />
+                  {filterCount > 0 && !isGearOpen && (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left">Search and filters</TooltipContent>
+              <TooltipContent side="left">
+                {isGearOpen ? 'Collapse Settings' : 'Expand Graph Settings'}
+              </TooltipContent>
             </Tooltip>
 
-            {(collapsedCount > 0 || focused) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-primary"
-                    aria-label="Show everything"
-                    onClick={() => {
-                      onExpandAll();
-                      onClearFocus();
-                    }}
-                  >
-                    <UnfoldVertical className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left">Show everything</TooltipContent>
-              </Tooltip>
+
+
+            {/* Sub-grup Icon Buttons yang muncul ke bawah saat Gear dibuka */}
+            {isGearOpen && (
+              <div className="mt-1 flex flex-col items-center gap-1 border-t border-border/60 pt-1 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+                {/* 1. Search & Filters */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={activePanel === 'search' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className={cn('relative h-8 w-8', filterCount > 0 && 'text-primary')}
+                      onClick={() => togglePanel('search')}
+                      aria-label="Search and Depth Filters"
+                    >
+                      <Search className="h-4 w-4" />
+                      {filterCount > 0 && (
+                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Search & Filters</TooltipContent>
+                </Tooltip>
+
+                {/* 2. Layout Engine */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={activePanel === 'layout' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => togglePanel('layout')}
+                      aria-label="Layout Engine"
+                    >
+                      <Network className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Layout & Hierarchy</TooltipContent>
+                </Tooltip>
+
+                {/* 3. Node Appearance */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={activePanel === 'nodes' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => togglePanel('nodes')}
+                      aria-label="Node Appearance"
+                    >
+                      <Circle className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Node Styling & Glow</TooltipContent>
+                </Tooltip>
+
+                {/* 4. Link & Particles */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={activePanel === 'links' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => togglePanel('links')}
+                      aria-label="Link & Particles"
+                    >
+                      <Link2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Link & Particles</TooltipContent>
+                </Tooltip>
+
+                {/* 5. Physics & Forces */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={activePanel === 'physics' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => togglePanel('physics')}
+                      aria-label="Physics & Forces"
+                    >
+                      <Zap className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Physics & Forces</TooltipContent>
+                </Tooltip>
+
+                {/* 6. global & Stats */}
+    {/* Tombol Graph Global (Templates) */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant={activePanel === 'global' ? 'secondary' : 'ghost'}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => togglePanel('global')}
+        >
+          <Globe className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left">Graph Global & Templates</TooltipContent>
+    </Tooltip>
+
+                {/* Expand All / Clear Focus Indicator */}
+    {(collapsedCount > 0 || focused) && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-primary animate-in fade-in zoom-in-90 duration-150"
+            aria-label="Show everything"
+            onClick={() => {
+              onExpandAll();
+              onClearFocus();
+            }}
+          >
+            <UnfoldVertical className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          Show everything ({collapsedCount} collapsed)
+        </TooltipContent>
+      </Tooltip>
+    )}
+              </div>
             )}
           </div>
 
-          {/* Button group Smart Zoom langsung (Zoom-to-Fit & Zoom-to-Selection) */}
-          <div className="pointer-events-auto flex flex-col items-center gap-1 rounded-md border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
+          {/* Quick Zoom Actions */}
+          <div className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9"
+                  className="h-8 w-8"
                   aria-label="Zoom to fit"
                   onClick={() => onSmartZoom('fit')}
                 >
@@ -222,7 +342,7 @@ export function GraphWorkspaceControls({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9"
+                  className="h-8 w-8"
                   aria-label="Zoom to selection"
                   onClick={() => onSmartZoom('selection')}
                 >
@@ -232,108 +352,197 @@ export function GraphWorkspaceControls({
               <TooltipContent side="left">Zoom to selection</TooltipContent>
             </Tooltip>
           </div>
-
         </div>
 
-         {panel && (
-          <section className="pointer-events-auto flex h-[180px] w-[235px] flex-col rounded-md border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150">
+        {/* Panel Pop-up Konten Pengaturan di Kiri Toolbar */}
+        {activePanel && (
+          <section className="pointer-events-auto flex max-h-[360px] min-h-[220px] w-[260px] flex-col rounded-lg border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150 sm:w-[280px]">
+            {/* Header Panel */}
             <header className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-              <div>
-                <p className="text-xs font-semibold text-foreground">
-                  {panel === 'options' ? 'Graph options' : panel === 'search-filters' ? 'Search & Filters' : 'Smart zoom'}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {panel === 'options' ? 'Adjust appearance and layout' : panel === 'search-filters' ? 'Find nodes and narrow the network' : 'Frame the graph or selection'}
-                </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold capitalize text-foreground">
+                  {activePanel === 'search' && 'Search & Depth'}
+                  {activePanel === 'layout' && 'Layout Engine'}
+                  {activePanel === 'nodes' && 'Node Appearance'}
+                  {activePanel === 'links' && 'Links & Particles'}
+                  {activePanel === 'physics' && 'Physics & Forces'}
+                  {activePanel === 'global' && 'Graph global'}
+                </span>
               </div>
-              <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPanel(null)} aria-label="Close graph tools">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={() => setActivePanel(null)}
+              >
                 <X className="h-3.5 w-3.5" />
               </Button>
             </header>
 
-
-             <div className="flex-1 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
-              {panel === 'options' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {LAYOUTS.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <Button
-                          key={item.value}
-                          type="button"
-                          variant={layout === item.value ? 'secondary' : 'ghost'}
-                          className="h-10 justify-start px-3 text-xs"
-                          onClick={() => onLayoutChange(item.value)}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {item.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-
-                  {layout === 'mindmap' && (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(['balanced', 'radial'] as MindmapOrientation[]).map((value) => (
-                        <Button
-                          key={value}
-                          type="button"
-                          variant={orientation === value ? 'secondary' : 'outline'}
-                          className="h-9 text-xs capitalize"
-                          onClick={() => onOrientationChange(value)}
-                        >
-                          {value}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between gap-3 border-t pt-3">
-                    <Label htmlFor="graph-pathway" className="flex items-center gap-1.5 text-xs">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Highlight connected path
-                    </Label>
-                    <Switch
-                      id="graph-pathway"
-                      checked={highlightPathway}
-                      onCheckedChange={onHighlightPathwayChange}
+            {/* Body Panel dengan Thin Scrollbar */}
+            <div className="flex-1 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
+              {/* 1. SEARCH & DEPTH PANEL */}
+              {activePanel === 'search' && (
+                <div className="space-y-3.5">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Search by title</Label>
+                    <Input
+                      value={search}
+                      onChange={(e) => onSearchChange(e.target.value)}
+                      placeholder="Type title..."
+                      className="h-8 text-xs"
                     />
                   </div>
 
+                  <div className="space-y-1.5 rounded-md bg-secondary/30 p-2">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="font-medium">Depth Level</span>
+                      <span className="text-muted-foreground">{minDepth} - {maxDepth}</span>
+                    </div>
+                    <Slider
+                      value={[minDepth, maxDepth]}
+                      min={0}
+                      max={10}
+                      step={1}
+                      onValueChange={([min, max]) => {
+                        onMinDepthChange(min);
+                        onMaxDepthChange(max);
+                      }}
+                    />
+                  </div>
 
-                  <div className="space-y-3 border-t pt-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Label mode</Label>
-                      <div className="grid grid-cols-3 gap-1">
-                        {LABEL_MODES.map((item) => (
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Content text</Label>
+                    <Input
+                      value={contentFilter}
+                      onChange={(e) => onContentFilterChange(e.target.value)}
+                      placeholder="Match content..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Tag filter</Label>
+                    <Input
+                      value={tagFilter}
+                      onChange={(e) => onTagFilterChange(e.target.value)}
+                      placeholder="#tag..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 2. LAYOUT ENGINE PANEL */}
+              {activePanel === 'layout' && (
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Layout Algorithm</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {LAYOUTS.map((item) => {
+                        const Icon = item.icon;
+                        return (
                           <Button
                             key={item.value}
                             type="button"
-                            variant={labelMode === item.value ? 'secondary' : 'outline'}
-                            className="h-8 px-1 text-[11px]"
-                            onClick={() => setLabelMode(item.value)}
+                            variant={layout === item.value ? 'secondary' : 'outline'}
+                            className="h-9 justify-start px-2 text-xs"
+                            onClick={() => onLayoutChange(item.value)}
                           >
+                            <Icon className="mr-1.5 h-3.5 w-3.5" />
                             {item.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {layout === 'mindmap' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Orientation</Label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(['balanced', 'radial'] as MindmapOrientation[]).map((val) => (
+                          <Button
+                            key={val}
+                            type="button"
+                            variant={orientation === val ? 'secondary' : 'outline'}
+                            className="h-8 text-xs capitalize"
+                            onClick={() => onOrientationChange(val)}
+                          >
+                            {val}
                           </Button>
                         ))}
                       </div>
                     </div>
+                  )}
 
-                    <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="graph-glow" className="text-xs">Glowing nodes</Label>
+                  <div className="flex items-center justify-between border-t border-border/60 pt-2.5">
+                    <Label className="flex items-center gap-1.5 text-xs">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      Highlight connected path
+                    </Label>
+                    <Switch
+                      checked={highlightPathway}
+                      onCheckedChange={onHighlightPathwayChange}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3. NODE APPEARANCE PANEL */}
+              {activePanel === 'nodes' && (
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Shape</Label>
+                    <Select
+                      value={config.nodes.shape}
+                      onValueChange={(val: any) => updateNodeConfig({ shape: val })}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {NODE_SHAPES.map((s) => (
+                          <SelectItem key={s.value} value={s.value} className="text-xs">
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Labels display</Label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {LABEL_MODES.map((item) => (
+                        <Button
+                          key={item.value}
+                          type="button"
+                          variant={labelMode === item.value ? 'secondary' : 'outline'}
+                          className="h-7 text-[11px]"
+                          onClick={() => setLabelMode(item.value)}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 border-t border-border/60 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Glowing Nodes</Label>
                       <Switch
-                        id="graph-glow"
                         checked={config.nodes.glow}
                         onCheckedChange={(checked) => updateNodeConfig({ glow: checked })}
                       />
                     </div>
 
                     {config.nodes.glow && (
-                      <div className="space-y-3 rounded-md bg-secondary/40 p-2.5">
-                        <div className="space-y-1.5">
+                      <div className="space-y-2 rounded-md bg-secondary/30 p-2">
+                        <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Glow intensity</span>
+                            <span>Intensity</span>
                             <span>{config.nodes.glowIntensity.toFixed(2)}</span>
                           </div>
                           <Slider
@@ -341,39 +550,79 @@ export function GraphWorkspaceControls({
                             min={0.1}
                             max={1}
                             step={0.05}
-                            onValueChange={([value]) => updateNodeConfig({ glowIntensity: value })}
+                            onValueChange={([v]) => updateNodeConfig({ glowIntensity: v })}
                           />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Pulse speed</span>
-                            <span>{config.nodes.glowSpeed === 0 ? 'Static' : config.nodes.glowSpeed.toFixed(1) + 'x'}</span>
+                            <span>Pulse Speed</span>
+                            <span>{config.nodes.glowSpeed === 0 ? 'Static' : `${config.nodes.glowSpeed.toFixed(1)}x`}</span>
                           </div>
                           <Slider
                             value={[config.nodes.glowSpeed]}
                             min={0}
                             max={3}
                             step={0.1}
-                            onValueChange={([value]) => updateNodeConfig({ glowSpeed: value })}
+                            onValueChange={([v]) => updateNodeConfig({ glowSpeed: v })}
                           />
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
 
-                    <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="graph-particles" className="text-xs">Particle animation</Label>
+              {/* 4. LINKS & PARTICLES PANEL */}
+              {activePanel === 'links' && (
+                <div className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Link Curvature</span>
+                      <span>{config.links.curvature.toFixed(2)}</span>
+                    </div>
+                    <Slider
+                      value={[config.links.curvature]}
+                      min={0}
+                      max={0.8}
+                      step={0.05}
+                      onValueChange={([v]) => updateLinkConfig({ curvature: v })}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Link Thickness</span>
+                      <span>{config.links.width}px</span>
+                    </div>
+                    <Slider
+                      value={[config.links.width]}
+                      min={0.5}
+                      max={5}
+                      step={0.5}
+                      onValueChange={([v]) => updateLinkConfig({ width: v })}
+                    />
+                  </div>
+
+                  <div className="space-y-2 border-t border-border/60 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Particles Animation</Label>
                       <Switch
-                        id="graph-particles"
                         checked={config.links.showParticles}
-                        onCheckedChange={toggleParticles}
+                        onCheckedChange={(checked) =>
+                          updateLinkConfig({
+                            showParticles: checked,
+                            ...(checked && config.links.particles < 1 ? { particles: 2 } : {}),
+                            ...(checked && config.links.particleSpeed <= 0 ? { particleSpeed: 0.01 } : {}),
+                          })
+                        }
                       />
                     </div>
 
                     {config.links.showParticles && (
-                      <div className="space-y-3 rounded-md bg-secondary/40 p-2.5">
-                        <div className="space-y-1.5">
+                      <div className="space-y-2 rounded-md bg-secondary/30 p-2">
+                        <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Particles per link</span>
+                            <span>Count / link</span>
                             <span>{config.links.particles}</span>
                           </div>
                           <Slider
@@ -381,12 +630,12 @@ export function GraphWorkspaceControls({
                             min={1}
                             max={6}
                             step={1}
-                            onValueChange={([value]) => updateLinkConfig({ particles: value })}
+                            onValueChange={([v]) => updateLinkConfig({ particles: v })}
                           />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Particle speed</span>
+                            <span>Flow Speed</span>
                             <span>{config.links.particleSpeed.toFixed(3)}</span>
                           </div>
                           <Slider
@@ -394,146 +643,126 @@ export function GraphWorkspaceControls({
                             min={0.002}
                             max={0.05}
                             step={0.002}
-                            onValueChange={([value]) => updateLinkConfig({ particleSpeed: value })}
+                            onValueChange={([v]) => updateLinkConfig({ particleSpeed: v })}
                           />
                         </div>
                       </div>
                     )}
                   </div>
-
-                  {layout === 'free-force' && (
-                    <div className="space-y-3 border-t pt-3">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Physics &amp; forces</Label>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>Repulsion</span>
-                          <span>{config.forces.chargeStrength}</span>
-                        </div>
-                        <Slider
-                          value={[config.forces.chargeStrength]}
-                          min={-1200}
-                          max={-20}
-                          step={20}
-                          onValueChange={([value]) => updateForceConfig({ chargeStrength: value })}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>Link distance</span>
-                          <span>{config.forces.linkDistance}</span>
-                        </div>
-                        <Slider
-                          value={[config.forces.linkDistance]}
-                          min={20}
-                          max={400}
-                          step={5}
-                          onValueChange={([value]) => updateForceConfig({ linkDistance: value })}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                          <span>Centering</span>
-                          <span>{config.forces.centerStrength.toFixed(2)}</span>
-                        </div>
-                        <Slider
-                          value={[config.forces.centerStrength]}
-                          min={0}
-                          max={2}
-                          step={0.05}
-                          onValueChange={([value]) => updateForceConfig({ centerStrength: value })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {(collapsedCount > 0 || focused) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => {
-                        onExpandAll();
-                        onClearFocus();
-                      }}
-                    >
-                      Show everything
-                      {collapsedCount > 0 ? ` (${collapsedCount} collapsed)` : ''}
-                    </Button>
-                  )}
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start gap-2 border-t pt-3 rounded-none h-auto py-2"
-                    onClick={openSettings}
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                    <span className="text-xs">Engine settings</span>
-                  </Button>
                 </div>
               )}
 
-              {panel === 'search-filters' && (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      autoFocus
-                      value={search}
-                      onChange={(event) => onSearchChange(event.target.value)}
-                      placeholder="Search node names…"
-                      className="h-10 bg-secondary/60 pl-9"
+              {/* 5. PHYSICS & FORCES PANEL */}
+              {activePanel === 'physics' && (
+                <div className="space-y-3.5">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={requestReheat}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reheat
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={requestStop}
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                      Freeze
+                    </Button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">DAG Direction</Label>
+                    <Select
+                      value={config.forces.dagMode}
+                      onValueChange={(val: any) => updateForceConfig({ dagMode: val })}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAG_MODES.map((d) => (
+                          <SelectItem key={d.value} value={d.value} className="text-xs">
+                            {d.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Repulsion</span>
+                      <span>{config.forces.chargeStrength}</span>
+                    </div>
+                    <Slider
+                      value={[config.forces.chargeStrength]}
+                      min={-1200}
+                      max={-20}
+                      step={20}
+                      onValueChange={([v]) => updateForceConfig({ chargeStrength: v })}
                     />
                   </div>
 
-                  <div className="space-y-4 border-t pt-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs">Depth range</Label>
-                        <span className="text-xs font-medium tabular-nums text-primary">
-                          {minDepth} – {maxDepth}
-                        </span>
-                      </div>
-                      <div className="pt-1.5 pb-1">
-                        <Slider
-                          value={[minDepth, maxDepth]}
-                          min={0}
-                          max={10}
-                          step={1}
-                          minStepsBetweenThumbs={0}
-                          onValueChange={([newMin, newMax]) => {
-                            onMinDepthChange(newMin);
-                            onMaxDepthChange(newMax);
-                          }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>Min: {minDepth}</span>
-                        <span>Max: {maxDepth}</span>
-                      </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Link Distance</span>
+                      <span>{config.forces.linkDistance}px</span>
                     </div>
-                    <div>
-                      <Label htmlFor="graph-content-filter" className="text-xs">Content</Label>
-                      <Input id="graph-content-filter" value={contentFilter} onChange={(event) => onContentFilterChange(event.target.value)} placeholder="Filter note content…" className="mt-1.5 h-9 bg-secondary/60" />
-                    </div>
-                    <div>
-                      <Label htmlFor="graph-tag-filter" className="text-xs">Tags</Label>
-                      <Input id="graph-tag-filter" value={tagFilter} onChange={(event) => onTagFilterChange(event.target.value)} placeholder="Filter tags…" className="mt-1.5 h-9 bg-secondary/60" />
-                    </div>
-                    {filterCount > 0 && (
-                      <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => {
-                        onSearchChange('');
-                        onMinDepthChange(0);
-                        onMaxDepthChange(10);
-                        onContentFilterChange('');
-                        onTagFilterChange('');
-                      }}>
-                        Clear filters
-                      </Button>
-                    )}
+                    <Slider
+                      value={[config.forces.linkDistance]}
+                      min={20}
+                      max={400}
+                      step={5}
+                      onValueChange={([v]) => updateForceConfig({ linkDistance: v })}
+                    />
                   </div>
+                </div>
+              )}
+
+              {/* 6. global & STATS PANEL */}
+              {activePanel === 'global' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="rounded-md border border-border/60 bg-secondary/30 p-2">
+                      <div className="text-base font-bold text-foreground">{stats.nodeCount}</div>
+                      <div className="text-[10px] uppercase text-muted-foreground">Nodes</div>
+                    </div>
+                    <div className="rounded-md border border-border/60 bg-secondary/30 p-2">
+                      <div className="text-base font-bold text-foreground">{stats.totalCount}</div>
+                      <div className="text-[10px] uppercase text-muted-foreground">Links</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span>Explicit Links</span>
+                      <span className="font-mono text-foreground">{stats.explicitCount}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span>Tag Relations</span>
+                      <span className="font-mono text-foreground">{stats.tagCount}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span>Orphan Nodes</span>
+                      <span className="font-mono text-foreground">{stats.orphanCount}</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-muted-foreground hover:text-foreground"
+                    onClick={resetConfig}
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Reset Graph Defaults
+                  </Button>
                 </div>
               )}
             </div>

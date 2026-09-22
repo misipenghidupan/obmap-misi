@@ -138,14 +138,7 @@ const leafStoreRegistry = new Map<string, StoreApi<GraphInteractionState>>();
 
 /** Creates (and memoises) one store per graph leaf id. */
 export function useLeafGraphInteractionStore(leafId: string) {
-  return useMemo(() => {
-    let store = leafStoreRegistry.get(leafId);
-    if (!store) {
-      store = createGraphInteractionStore();
-      leafStoreRegistry.set(leafId, store);
-    }
-    return store;
-  }, [leafId]);
+  return useMemo(() => createGraphInteractionStore(), [leafId]);
 }
 
 export function useGraphInteractionStoreApi(): StoreApi<GraphInteractionState> {

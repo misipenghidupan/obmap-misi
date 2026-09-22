@@ -11,7 +11,7 @@ import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { LeafViewProps } from "../ViewRegistry";
 import { useEffect, useRef, useState } from "react";
 
-function GraphLeafBody({ isActive = true }: { isActive?: boolean }) {
+function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?: boolean }) {
   const { graphData, selectedNode, setSelectedNode } = useVaultSession();
   const graphConfig = useGraphStore((s) => s.config);
   const {
@@ -32,7 +32,6 @@ function GraphLeafBody({ isActive = true }: { isActive?: boolean }) {
   const [contentFilter, setContentFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const graphRef = useRef<GraphCanvasHandle>(null);
-
   const handleSmartZoom = (action: SmartZoomAction) => graphRef.current?.smartZoom(action);
 
   const handleSelect = (node: typeof selectedNode) => {
