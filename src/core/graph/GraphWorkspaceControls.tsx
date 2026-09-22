@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/shared/lib/cn';
 import {
   BarChart3,
+  Bookmark,
+  Check,
   Circle,
   Clock3,
   Focus,
@@ -18,11 +20,14 @@ import {
   Network,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Search,
   Settings2,
   SlidersHorizontal,
   Sparkles,
+  Star,
+  Trash2,
   UnfoldVertical,
   X,
   Zap,
@@ -31,6 +36,10 @@ import { useState } from 'react';
 import type { LayoutMode, MindmapOrientation } from './model/graphTypes';
 import { useGraphStore } from '@/shared/stores';
 import { useGraphInteractionStore } from './model/useGraphInteractionStore';
+// Tambahkan import store, UI, dan toast berikut:
+import { toast } from 'sonner';
+import { Badge } from '@/shared/ui/badge';
+import { useGraphTemplatesStore, type GraphTemplate } from '@/shared/stores/useGraphTemplatesStore';
 
 type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';
@@ -117,6 +126,19 @@ export function GraphWorkspaceControls({
   const [isGearOpen, setIsGearOpen] = useState(true);
   const [activePanel, setActivePanel] = useState<SettingGroup | null>(null);
 
+  // 1. Local state untuk input nama template baru
+  const [templateName, setTemplateName] = useState('');
+
+  // 2. Selectors Graph Store
+  const setConfig = useGraphStore((s) => s.setConfig);
+
+  // 3. Selectors Graph Templates Store
+  const templates = useGraphTemplatesStore((s) => s.templates);
+  const defaultTemplateId = useGraphTemplatesStore((s) => s.defaultTemplateId);
+  const saveTemplate = useGraphTemplatesStore((s) => s.saveTemplate);
+  const deleteTemplate = useGraphTemplatesStore((s) => s.deleteTemplate);
+  const setDefaultTemplate = useGraphTemplatesStore((s) => s.setDefaultTemplate);
+
   const config = useGraphStore((s) => s.config);
   const stats = useGraphStore((s) => s.stats);
   const updateNodeConfig = useGraphStore((s) => s.updateNodeConfig);
@@ -149,6 +171,64 @@ export function GraphWorkspaceControls({
     else if (mode === 'labels') updateNodeConfig({ showLabels: true, labelBox: false });
     else updateNodeConfig({ showLabels: true, labelBox: true });
   };
+
+    // Handler 1: Simpan setting saat ini sebagai template baru
+  const handleSaveTemplate = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = templateName.trim();
+    if (!trimmed) {
+      toast.error('Masukkan nama template terlebih dahulu');
+      return;
+    }
+
+    try {
+      const newId = saveTemplate(trimmed, config, layout, orientation);
+      setTemplateName('');
+      toast.success(`Template "${trimmed}" berhasil disimpan`);
+    } catch (err) {
+      toast.error('Gagal menyimpan template graph');
+    }
+  };
+
+  // Handler 2: Terapkan template terpilih ke graph saat ini
+  const handleApplyTemplate = (template: GraphTemplate) => {
+    try {
+      // 1. Terapkan konfigurasi node, link, hierarki, dan physics
+      setConfig(template.config);
+
+      // 2. Terapkan mode layout dan orientasi bila tersimpan di template
+      if (template.layoutMode) {
+        onLayoutChange(template.layoutMode);
+      }
+      if (template.orientation) {
+        onOrientationChange(template.orientation);
+      }
+
+      toast.success(`Template "${template.name}" diterapkan`);
+    } catch (err) {
+      toast.error('Gagal menerapkan template');
+    }
+  };
+
+  // Handler 3: Jadikan template default (untuk tab baru atau vault default)
+  const handleToggleDefault = (template: GraphTemplate) => {
+    const isCurrentDefault = defaultTemplateId === template.id;
+    const nextDefault = isCurrentDefault ? null : template.id;
+    setDefaultTemplate(nextDefault);
+
+    if (nextDefault) {
+      toast.success(`"${template.name}" dijadikan template default`);
+    } else {
+      toast.info('Template default dihapus');
+    }
+  };
+
+  // Handler 4: Hapus template
+  const handleDeleteTemplate = (template: GraphTemplate) => {
+    deleteTemplate(template.id);
+    toast.info(`Template "${template.name}" telah dihapus`);
+  };
+
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -275,7 +355,6 @@ export function GraphWorkspaceControls({
                 </Tooltip>
 
                 {/* 6. global & Stats */}
-    {/* Tombol Graph Global (Templates) */}
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
@@ -725,44 +804,170 @@ export function GraphWorkspaceControls({
                 </div>
               )}
 
-              {/* 6. global & STATS PANEL */}
+              {/* 6. GRAPH GLOBAL & TEMPLATES PANEL */}
               {activePanel === 'global' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <div className="rounded-md border border-border/60 bg-secondary/30 p-2">
-                      <div className="text-base font-bold text-foreground">{stats.nodeCount}</div>
-                      <div className="text-[10px] uppercase text-muted-foreground">Nodes</div>
+                <div className="space-y-4">
+                  {/* Bagian A: Simpan Template Baru */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      <Bookmark className="h-3 w-3 text-primary" />
+                      <span>Save as Template</span>
                     </div>
-                    <div className="rounded-md border border-border/60 bg-secondary/30 p-2">
-                      <div className="text-base font-bold text-foreground">{stats.totalCount}</div>
-                      <div className="text-[10px] uppercase text-muted-foreground">Links</div>
+                    <form onSubmit={handleSaveTemplate} className="flex gap-1.5">
+                      <Input
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Template name (e.g. Focus Dark)..."
+                        className="h-8 text-xs bg-background/50"
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        className="h-8 shrink-0 px-2.5 text-xs gap-1"
+                        disabled={!templateName.trim()}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Save
+                      </Button>
+                    </form>
+                  </div>
+
+                  {/* Bagian B: Daftar Template Tersimpan */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      <span>Saved Templates</span>
+                      <span className="font-mono text-[10px]">
+                        {Object.keys(templates).length}
+                      </span>
+                    </div>
+
+                    <div className="max-h-[140px] space-y-1 overflow-y-auto pr-1">
+                      {Object.keys(templates).length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border/60 p-2.5 text-center text-[11px] text-muted-foreground">
+                          Belum ada template tersimpan. Simpan preferensi graph Anda di atas.
+                        </div>
+                      ) : (
+                        Object.values(templates).map((tmpl) => {
+                          const isDefault = defaultTemplateId === tmpl.id;
+                          return (
+                            <div
+                              key={tmpl.id}
+                              className="group flex items-center justify-between gap-1.5 rounded-md border border-border/50 bg-secondary/20 px-2 py-1.5 transition-colors hover:bg-secondary/40"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate text-xs font-medium text-foreground">
+                                    {tmpl.name}
+                                  </span>
+                                  {isDefault && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-4 px-1 text-[9px] font-mono leading-none text-primary"
+                                    >
+                                      Default
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {tmpl.layoutMode || 'free-force'} •{' '}
+                                  {new Date(tmpl.updatedAt).toLocaleDateString()}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {/* Tombol Terapkan */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                                      onClick={() => handleApplyTemplate(tmpl)}
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">Apply Template</TooltipContent>
+                                </Tooltip>
+
+                                {/* Tombol Jadikan Default */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className={cn(
+                                        'h-6 w-6',
+                                        isDefault
+                                          ? 'text-amber-400 hover:text-amber-500'
+                                          : 'text-muted-foreground hover:text-foreground'
+                                      )}
+                                      onClick={() => handleToggleDefault(tmpl)}
+                                    >
+                                      <Star
+                                        className={cn(
+                                          'h-3 w-3',
+                                          isDefault && 'fill-current'
+                                        )}
+                                      />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    {isDefault ? 'Remove Default' : 'Set as Default'}
+                                  </TooltipContent>
+                                </Tooltip>
+
+                                {/* Tombol Hapus */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                      onClick={() => handleDeleteTemplate(tmpl)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">Delete Template</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
 
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex justify-between py-1 border-b border-border/40">
-                      <span>Explicit Links</span>
-                      <span className="font-mono text-foreground">{stats.explicitCount}</span>
+                  {/* Bagian C: Ringkasan Stats & Reset */}
+                  <div className="space-y-2 border-t border-border/40 pt-2.5">
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
+                        <div className="text-sm font-bold text-foreground">{stats.nodeCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Nodes</div>
+                      </div>
+                      <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
+                        <div className="text-sm font-bold text-foreground">{stats.totalCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Links</div>
+                      </div>
                     </div>
-                    <div className="flex justify-between py-1 border-b border-border/40">
-                      <span>Tag Relations</span>
-                      <span className="font-mono text-foreground">{stats.tagCount}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-border/40">
-                      <span>Orphan Nodes</span>
-                      <span className="font-mono text-foreground">{stats.orphanCount}</span>
-                    </div>
-                  </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs text-muted-foreground hover:text-foreground"
-                    onClick={resetConfig}
-                  >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                    Reset Graph Defaults
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full h-7 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        resetConfig();
+                        toast.info('Graph config dikembalikan ke default bawaan');
+                      }}
+                    >
+                      <RotateCcw className="mr-1.5 h-3 w-3" />
+                      Reset to Factory Defaults
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
