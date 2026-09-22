@@ -1,7 +1,7 @@
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
-import { Slider } from "@/shared/ui/slider-number";
+import { Slider } from "@/shared/ui/slider-noinput";
 import { Switch } from '@/shared/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/ui/tooltip';
 import { cn } from '@/shared/lib/cn';
@@ -34,13 +34,13 @@ const LABEL_MODES: { value: LabelMode; label: string }[] = [
 ];
 
 const LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
+  { value: 'free-force', label: 'Free force', icon: Network },
   { value: 'mindmap', label: 'Mindmap', icon: GitBranch },
   { value: 'timeline', label: 'Timeline', icon: Clock3 },
   { value: 'fishbone', label: 'Fishbone', icon: SlidersHorizontal },
-  { value: 'free-force', label: 'Free force', icon: Network },
 ];
 
-type Panel = 'options' | 'search-filters' | 'zoom';
+type Panel = 'options' | 'search-filters';
 
 export type SmartZoomAction = 'fit' | 'selection' | 'reset';
 
@@ -116,20 +116,20 @@ export function GraphWorkspaceControls({
       ...(enabled && config.links.particleSpeed <= 0 ? { particleSpeed: 0.01 } : {}),
     });
   };
-  const filterCount = 
-    Number(minDepth > 0) + 
-    Number(maxDepth < 10) + 
+  const filterCount =
+    Number(minDepth > 0) +
+    Number(maxDepth < 10) +
     Number(Boolean(search)) +
-    Number(Boolean(contentFilter)) + 
+    Number(Boolean(contentFilter)) +
     Number(Boolean(tagFilter));
 
   const togglePanel = (next: Panel) => setPanel((current) => current === next ? null : next);
 
   const openSettings = () => {
-    useWorkspaceStore.getState().openView({ 
-      type: 'settings', 
-      settingsSection: 'graph', 
-      title: 'Settings' 
+    useWorkspaceStore.getState().openView({
+      type: 'settings',
+      settingsSection: 'graph',
+      title: 'Settings'
     });
     setPanel(null);
   };
@@ -198,27 +198,46 @@ export function GraphWorkspaceControls({
             )}
           </div>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant={panel === 'zoom' ? 'secondary' : 'outline'}
-                size="icon"
-                className="pointer-events-auto h-11 w-11 border-border/80 bg-card/95 shadow-xl backdrop-blur-md"
-                aria-label="Smart zoom controls"
-                aria-pressed={panel === 'zoom'}
-                onClick={() => togglePanel('zoom')}
-              >
-                <Frame className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">Smart zoom</TooltipContent>
-          </Tooltip>
+          {/* Button group Smart Zoom langsung (Zoom-to-Fit & Zoom-to-Selection) */}
+          <div className="pointer-events-auto flex flex-col items-center gap-1 rounded-md border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Zoom to fit"
+                  onClick={() => onSmartZoom('fit')}
+                >
+                  <Frame className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Zoom to fit</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Zoom to selection"
+                  onClick={() => onSmartZoom('selection')}
+                >
+                  <Focus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Zoom to selection</TooltipContent>
+            </Tooltip>
+          </div>
+
         </div>
 
-        {panel && (
-          <section className="pointer-events-auto w-[min(18rem,calc(100vw-5.5rem))] max-h-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150">
-            <header className="flex h-11 items-center justify-between border-b border-border px-3">
+         {panel && (
+          <section className="pointer-events-auto flex h-[180px] w-[235px] flex-col rounded-md border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150">
+            <header className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
               <div>
                 <p className="text-xs font-semibold text-foreground">
                   {panel === 'options' ? 'Graph options' : panel === 'search-filters' ? 'Search & Filters' : 'Smart zoom'}
@@ -227,12 +246,13 @@ export function GraphWorkspaceControls({
                   {panel === 'options' ? 'Adjust appearance and layout' : panel === 'search-filters' ? 'Find nodes and narrow the network' : 'Frame the graph or selection'}
                 </p>
               </div>
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPanel(null)} aria-label="Close graph tools">
+              <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPanel(null)} aria-label="Close graph tools">
                 <X className="h-3.5 w-3.5" />
               </Button>
             </header>
 
-            <div className="p-3">
+
+             <div className="flex-1 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
               {panel === 'options' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-1.5">
@@ -469,26 +489,29 @@ export function GraphWorkspaceControls({
                   </div>
 
                   <div className="space-y-4 border-t pt-4">
-                    <div>
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <Label className="text-xs">Depth range</Label>
-                        <span className="text-xs tabular-nums text-primary">{minDepth} – {maxDepth}</span>
+                        <span className="text-xs font-medium tabular-nums text-primary">
+                          {minDepth} – {maxDepth}
+                        </span>
                       </div>
-                      <div className="mt-3 space-y-4">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Min depth</span>
-                            <span>{minDepth}</span>
-                          </div>
-                          <Slider value={[minDepth]} min={0} max={10} step={1} onValueChange={([value]) => onMinDepthChange(value)} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Max depth</span>
-                            <span>{maxDepth}</span>
-                          </div>
-                          <Slider value={[maxDepth]} min={0} max={10} step={1} onValueChange={([value]) => onMaxDepthChange(value)} />
-                        </div>
+                      <div className="pt-1.5 pb-1">
+                        <Slider
+                          value={[minDepth, maxDepth]}
+                          min={0}
+                          max={10}
+                          step={1}
+                          minStepsBetweenThumbs={0}
+                          onValueChange={([newMin, newMax]) => {
+                            onMinDepthChange(newMin);
+                            onMaxDepthChange(newMax);
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Min: {minDepth}</span>
+                        <span>Max: {maxDepth}</span>
                       </div>
                     </div>
                     <div>
@@ -511,23 +534,6 @@ export function GraphWorkspaceControls({
                       </Button>
                     )}
                   </div>
-                </div>
-              )}
-
-              {panel === 'zoom' && (
-                <div className="space-y-1">
-                  <Button type="button" variant="ghost" className="h-auto w-full justify-start gap-3 py-2.5" onClick={() => { onSmartZoom('fit'); setPanel(null); }}>
-                    <Frame className="h-4 w-4 shrink-0" />
-                    <span className="text-left"><span className="block text-xs font-medium">Zoom-to-Fit</span><span className="block text-[10px] text-muted-foreground">Fit the entire graph</span></span>
-                  </Button>
-                  <Button type="button" variant="ghost" className="h-auto w-full justify-start gap-3 py-2.5" onClick={() => { onSmartZoom('selection'); setPanel(null); }}>
-                    <Focus className="h-4 w-4 shrink-0" />
-                    <span className="text-left"><span className="block text-xs font-medium">Zoom-to-Selection</span><span className="block text-[10px] text-muted-foreground">Focus selected nodes</span></span>
-                  </Button>
-                  <Button type="button" variant="ghost" className="h-auto w-full justify-start gap-3 py-2.5" onClick={() => { onSmartZoom('reset'); setPanel(null); }}>
-                    <RotateCcw className="h-4 w-4 shrink-0" />
-                    <span className="text-left"><span className="block text-xs font-medium">Reset Zoom</span><span className="block text-[10px] text-muted-foreground">Return to 100%</span></span>
-                  </Button>
                 </div>
               )}
             </div>

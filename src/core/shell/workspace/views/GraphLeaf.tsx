@@ -9,9 +9,9 @@ import { useGraphStore } from "@/shared/stores";
 import { useVaultSession } from "../VaultSessionContext";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { LeafViewProps } from "../ViewRegistry";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-function GraphLeafBody() {
+function GraphLeafBody({ isActive = true }: { isActive?: boolean }) {
   const { graphData, selectedNode, setSelectedNode } = useVaultSession();
   const graphConfig = useGraphStore((s) => s.config);
   const {
@@ -37,10 +37,14 @@ function GraphLeafBody() {
 
   const handleSelect = (node: typeof selectedNode) => {
     setSelectedNode(node);
+  };
+
+  const handleOpen = (node: typeof selectedNode) => {
     if (node && node.type !== "folder") {
       useWorkspaceStore.getState().openFile(node.id, node.name);
     }
   };
+
 
   return (
     <div className="relative w-full h-full">
@@ -49,6 +53,7 @@ function GraphLeafBody() {
         graphData={graphData}
         selectedNode={selectedNode}
         onNodeSelect={handleSelect}
+        onNodeOpen={handleOpen} 
         graphConfig={graphConfig}
         search={search}
         minDepth={minDepth}
@@ -92,13 +97,11 @@ function GraphLeafBody() {
   );
 }
 
-export default function GraphLeaf({ leaf }: LeafViewProps) {
-  // One interaction store per graph tab: each graph keeps its own layout,
-  // orientation, collapse set, focus and highlight state.
+export default function GraphLeaf({ leaf, isActive = true }: LeafViewProps) {
   const store = useLeafGraphInteractionStore(leaf.id);
   return (
     <GraphInteractionProvider store={store}>
-      <GraphLeafBody />
+      <GraphLeafBody isActive={isActive} />
     </GraphInteractionProvider>
   );
 }

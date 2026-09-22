@@ -36,9 +36,13 @@ export function Ribbon() {
     setActiveTool(activeTool === tool ? null : tool);
   };
 
+    const handleOpenGraph = () => {
+    openView({ type: "graph", title: "Graph View" });
+  };
+
   return (
     <>
-      <IconRibbon activeTool={activeTool} onToolSelect={handleToolSelect} />
+      <IconRibbon activeTool={activeTool} onToolSelect={handleToolSelect} onOpenGraph={handleOpenGraph}/>
       {activeTool && (
         <SidebarPanel
           activeTool={activeTool}
