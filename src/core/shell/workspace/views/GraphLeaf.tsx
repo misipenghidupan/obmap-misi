@@ -8,6 +8,7 @@ import {
 import {
   LeafGraphConfigProvider,
   useLeafGraphConfig,
+  useLeafGraphConfigStore,
 } from "@/core/graph/model/useLeafGraphConfigStore";
 import { useGraphStore } from "@/shared/stores";
 import { useVaultSession } from "../VaultSessionContext";
