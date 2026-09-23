@@ -90,19 +90,41 @@ export function createLeafGraphConfigStore(initialConfig?: GraphConfigState): St
 
     setFullConfig: (newConfig, templateId = null) =>
       set({
-        config: JSON.parse(JSON.stringify(newConfig)),
+        config: mergeGraphConfig(newConfig),
         activeTemplateId: templateId,
       }),
 
     resetToDefault: () => {
       const freshTemplatesState = useGraphTemplatesStore.getState();
-      const freshDefault = freshTemplatesState.getDefaultConfig?.() ?? useGraphStore.getState();
+      const freshDefault =
+        freshTemplatesState.getDefaultConfig?.() ?? useGraphStore.getState().config;
       set({
-        config: JSON.parse(JSON.stringify(freshDefault)),
+        config: mergeGraphConfig(freshDefault),
         activeTemplateId: freshTemplatesState.defaultTemplateId ?? null,
       });
     },
   }));
+}
+
+/** Registry: satu store config per graph leaf (tab), hidup sampai tab ditutup. */
+const leafConfigStores = new Map<string, StoreApi<LeafGraphConfigState>>();
+
+export function getOrCreateLeafConfigStore(leafId: string): StoreApi<LeafGraphConfigState> {
+  let store = leafConfigStores.get(leafId);
+  if (!store) {
+    store = createLeafGraphConfigStore();
+    leafConfigStores.set(leafId, store);
+  }
+  return store;
+}
+
+export function disposeLeafConfigStore(leafId: string): void {
+  leafConfigStores.delete(leafId);
+}
+
+/** Hook: memoized store per leaf id. */
+export function useLeafGraphConfigStore(leafId: string): StoreApi<LeafGraphConfigState> {
+  return useMemo(() => getOrCreateLeafConfigStore(leafId), [leafId]);
 }
 
 const LeafGraphConfigContext = createContext<StoreApi<LeafGraphConfigState> | null>(null);
