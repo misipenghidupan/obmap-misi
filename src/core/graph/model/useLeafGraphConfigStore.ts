@@ -147,20 +147,27 @@ export function useLeafGraphConfig(): GraphConfigState;
 export function useLeafGraphConfig<T>(selector: (state: LeafGraphConfigState) => T): T;
 export function useLeafGraphConfig<T>(selector?: (state: LeafGraphConfigState) => T) {
   const store = useContext(LeafGraphConfigContext);
-  if (!store) {
-    // Fallback ke global store bila dipanggil di luar leaf graph tab
-    const globalState = useGraphStore();
-    return selector ? selector({
-      config: globalState,
+  // Fallback ke global store bila dipanggil di luar leaf graph tab.
+  const globalConfig = useGraphStore((s) => s.config);
+  const fallback = useMemo<LeafGraphConfigState>(() => {
+    const g = useGraphStore.getState();
+    return {
+      config: mergeGraphConfig(g.config),
       activeTemplateId: null,
-      setNodeConfig: globalState.setNodeConfig,
-      setLinkConfig: globalState.setLinkConfig,
-      setForceConfig: globalState.setForceConfig,
-      setTopologyConfig: globalState.setTopologyConfig,
-      setHierarchyConfig: globalState.setHierarchyConfig,
-      setFullConfig: () => {},
-      resetToDefault: globalState.resetConfig,
-    }) : globalState;
+      setNodeConfig: (u) => g.updateNodeConfig(typeof u === 'function' ? u(g.config.nodes) : u),
+      setLinkConfig: (u) => g.updateLinkConfig(typeof u === 'function' ? u(g.config.links) : u),
+      setForceConfig: (u) => g.updateForceConfig(typeof u === 'function' ? u(g.config.forces) : u),
+      setTopologyConfig: (u) =>
+        g.updateTopologyConfig(typeof u === 'function' ? u(g.config.topology) : u),
+      setHierarchyConfig: (h) => g.updateHierarchyConfig(h),
+      setFullConfig: (c) => g.setConfig(mergeGraphConfig(c)),
+      resetToDefault: () => g.resetConfig(),
+    };
+  }, []);
+  if (!store) {
+    return selector
+      ? selector({ ...fallback, config: mergeGraphConfig(globalConfig) })
+      : mergeGraphConfig(globalConfig);
   }
   return useStore(store, (selector ?? ((s) => s.config)) as (s: LeafGraphConfigState) => T);
 }
