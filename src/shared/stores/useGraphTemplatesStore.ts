@@ -72,7 +72,7 @@ export const useGraphTemplatesStore = create<GraphTemplatesState>()(
       getDefaultConfig: () => {
         const { templates, defaultTemplateId } = get();
         if (defaultTemplateId && templates[defaultTemplateId]) {
-          return JSON.parse(JSON.stringify(templates[defaultTemplateId].config));
+          return mergeGraphConfig(templates[defaultTemplateId].config);
         }
         return JSON.parse(JSON.stringify(defaultGraphConfig));
       },
