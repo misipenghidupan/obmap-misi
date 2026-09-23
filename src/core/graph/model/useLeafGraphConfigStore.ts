@@ -7,6 +7,7 @@ import {
   type ForceConfig,
   type TopologyConfig,
   type HierarchyColorConfig,
+  mergeGraphConfig,
   useGraphStore,
 } from '@/shared/stores/useGraphStore';
 import { useGraphTemplatesStore } from '@/shared/stores/useGraphTemplatesStore';
@@ -24,11 +25,12 @@ export interface LeafGraphConfigState {
 }
 
 export function createLeafGraphConfigStore(initialConfig?: GraphConfigState): StoreApi<LeafGraphConfigState> {
-  // Ambil template default jika tersedia, fallback ke defaultGraphConfig dari useGraphTemplatesStore / useGraphStore
+  // Ambil template default jika tersedia; selalu deep-merge ke defaultGraphConfig
+  // agar config legacy/parsial tidak pernah menghasilkan section `undefined`.
   const templatesState = useGraphTemplatesStore.getState();
-  const baseConfig: GraphConfigState = initialConfig 
-    ? JSON.parse(JSON.stringify(initialConfig))
-    : JSON.parse(JSON.stringify(templatesState.getDefaultConfig?.() ?? useGraphStore.getState()));
+  const baseConfig: GraphConfigState = mergeGraphConfig(
+    initialConfig ?? templatesState.getDefaultConfig?.() ?? useGraphStore.getState().config,
+  );
 
   return createStore<LeafGraphConfigState>((set) => ({
     config: baseConfig,
