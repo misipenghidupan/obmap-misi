@@ -7,6 +7,7 @@ import {
   type ForceConfig,
   type TopologyConfig,
   type HierarchyColorConfig,
+  mergeGraphConfig,
   useGraphStore,
 } from '@/shared/stores/useGraphStore';
 import { useGraphTemplatesStore } from '@/shared/stores/useGraphTemplatesStore';
@@ -24,11 +25,12 @@ export interface LeafGraphConfigState {
 }
 
 export function createLeafGraphConfigStore(initialConfig?: GraphConfigState): StoreApi<LeafGraphConfigState> {
-  // Ambil template default jika tersedia, fallback ke defaultGraphConfig dari useGraphTemplatesStore / useGraphStore
+  // Ambil template default jika tersedia; selalu deep-merge ke defaultGraphConfig
+  // agar config legacy/parsial tidak pernah menghasilkan section `undefined`.
   const templatesState = useGraphTemplatesStore.getState();
-  const baseConfig: GraphConfigState = initialConfig 
-    ? JSON.parse(JSON.stringify(initialConfig))
-    : JSON.parse(JSON.stringify(templatesState.getDefaultConfig?.() ?? useGraphStore.getState()));
+  const baseConfig: GraphConfigState = mergeGraphConfig(
+    initialConfig ?? templatesState.getDefaultConfig?.() ?? useGraphStore.getState().config,
+  );
 
   return createStore<LeafGraphConfigState>((set) => ({
     config: baseConfig,
@@ -88,19 +90,41 @@ export function createLeafGraphConfigStore(initialConfig?: GraphConfigState): St
 
     setFullConfig: (newConfig, templateId = null) =>
       set({
-        config: JSON.parse(JSON.stringify(newConfig)),
+        config: mergeGraphConfig(newConfig),
         activeTemplateId: templateId,
       }),
 
     resetToDefault: () => {
       const freshTemplatesState = useGraphTemplatesStore.getState();
-      const freshDefault = freshTemplatesState.getDefaultConfig?.() ?? useGraphStore.getState();
+      const freshDefault =
+        freshTemplatesState.getDefaultConfig?.() ?? useGraphStore.getState().config;
       set({
-        config: JSON.parse(JSON.stringify(freshDefault)),
+        config: mergeGraphConfig(freshDefault),
         activeTemplateId: freshTemplatesState.defaultTemplateId ?? null,
       });
     },
   }));
+}
+
+/** Registry: satu store config per graph leaf (tab), hidup sampai tab ditutup. */
+const leafConfigStores = new Map<string, StoreApi<LeafGraphConfigState>>();
+
+export function getOrCreateLeafConfigStore(leafId: string): StoreApi<LeafGraphConfigState> {
+  let store = leafConfigStores.get(leafId);
+  if (!store) {
+    store = createLeafGraphConfigStore();
+    leafConfigStores.set(leafId, store);
+  }
+  return store;
+}
+
+export function disposeLeafConfigStore(leafId: string): void {
+  leafConfigStores.delete(leafId);
+}
+
+/** Hook: memoized store per leaf id. */
+export function useLeafGraphConfigStore(leafId: string): StoreApi<LeafGraphConfigState> {
+  return useMemo(() => getOrCreateLeafConfigStore(leafId), [leafId]);
 }
 
 const LeafGraphConfigContext = createContext<StoreApi<LeafGraphConfigState> | null>(null);
@@ -123,20 +147,27 @@ export function useLeafGraphConfig(): GraphConfigState;
 export function useLeafGraphConfig<T>(selector: (state: LeafGraphConfigState) => T): T;
 export function useLeafGraphConfig<T>(selector?: (state: LeafGraphConfigState) => T) {
   const store = useContext(LeafGraphConfigContext);
-  if (!store) {
-    // Fallback ke global store bila dipanggil di luar leaf graph tab
-    const globalState = useGraphStore();
-    return selector ? selector({
-      config: globalState,
+  // Fallback ke global store bila dipanggil di luar leaf graph tab.
+  const globalConfig = useGraphStore((s) => s.config);
+  const fallback = useMemo<LeafGraphConfigState>(() => {
+    const g = useGraphStore.getState();
+    return {
+      config: mergeGraphConfig(g.config),
       activeTemplateId: null,
-      setNodeConfig: globalState.setNodeConfig,
-      setLinkConfig: globalState.setLinkConfig,
-      setForceConfig: globalState.setForceConfig,
-      setTopologyConfig: globalState.setTopologyConfig,
-      setHierarchyConfig: globalState.setHierarchyConfig,
-      setFullConfig: () => {},
-      resetToDefault: globalState.resetConfig,
-    }) : globalState;
+      setNodeConfig: (u) => g.updateNodeConfig(typeof u === 'function' ? u(g.config.nodes) : u),
+      setLinkConfig: (u) => g.updateLinkConfig(typeof u === 'function' ? u(g.config.links) : u),
+      setForceConfig: (u) => g.updateForceConfig(typeof u === 'function' ? u(g.config.forces) : u),
+      setTopologyConfig: (u) =>
+        g.updateTopologyConfig(typeof u === 'function' ? u(g.config.topology) : u),
+      setHierarchyConfig: (h) => g.updateHierarchyConfig(h),
+      setFullConfig: (c) => g.setConfig(mergeGraphConfig(c)),
+      resetToDefault: () => g.resetConfig(),
+    };
+  }, []);
+  if (!store) {
+    return selector
+      ? selector({ ...fallback, config: mergeGraphConfig(globalConfig) })
+      : mergeGraphConfig(globalConfig);
   }
   return useStore(store, (selector ?? ((s) => s.config)) as (s: LeafGraphConfigState) => T);
 }

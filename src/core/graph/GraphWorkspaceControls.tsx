@@ -43,7 +43,14 @@ import { useGraphTemplatesStore, type GraphTemplate } from '@/shared/stores/useG
 import {
   useLeafGraphConfig,
   useLeafGraphConfigApi,
+  type LeafGraphConfigState,
 } from './model/useLeafGraphConfigStore';
+import type {
+  GraphConfigState,
+  NodeConfig,
+  LinkConfig,
+  ForceConfig,
+} from '@/shared/stores/useGraphStore';
 
 type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';
@@ -136,12 +143,22 @@ export function GraphWorkspaceControls({
   const globalConfig = useGraphStore((s) => s.config);
   const config = localConfig ?? globalConfig;
 
-  // Actions terisolasi per-tab
-  const setConfig = leafApi ? (cfg: any) => leafApi.getState().setConfig(cfg) : useGraphStore.getState().setConfig;
-  const updateNodeConfig = leafApi ? (upd: any) => leafApi.getState().updateNodeConfig(upd) : useGraphStore.getState().updateNodeConfig;
-  const updateLinkConfig = leafApi ? (upd: any) => leafApi.getState().updateLinkConfig(upd) : useGraphStore.getState().updateLinkConfig;
-  const updateForceConfig = leafApi ? (upd: any) => leafApi.getState().updateForceConfig(upd) : useGraphStore.getState().updateForceConfig;
-  const resetConfig = leafApi ? () => leafApi.getState().resetConfig() : useGraphStore.getState().resetConfig;
+  // Actions terisolasi per-tab (leaf store) dengan fallback ke global store
+  const setConfig = leafApi
+    ? (cfg: GraphConfigState) => leafApi.getState().setFullConfig(cfg)
+    : (cfg: GraphConfigState) => useGraphStore.getState().setConfig(cfg);
+  const updateNodeConfig = leafApi
+    ? (upd: Parameters<LeafGraphConfigState['setNodeConfig']>[0]) => leafApi.getState().setNodeConfig(upd)
+    : (upd: Partial<NodeConfig>) => useGraphStore.getState().updateNodeConfig(upd);
+  const updateLinkConfig = leafApi
+    ? (upd: Parameters<LeafGraphConfigState['setLinkConfig']>[0]) => leafApi.getState().setLinkConfig(upd)
+    : (upd: Partial<LinkConfig>) => useGraphStore.getState().updateLinkConfig(upd);
+  const updateForceConfig = leafApi
+    ? (upd: Parameters<LeafGraphConfigState['setForceConfig']>[0]) => leafApi.getState().setForceConfig(upd)
+    : (upd: Partial<ForceConfig>) => useGraphStore.getState().updateForceConfig(upd);
+  const resetConfig = leafApi
+    ? () => leafApi.getState().resetToDefault()
+    : () => useGraphStore.getState().resetConfig();
 
   // 1. Local state untuk input nama template baru
   const [templateName, setTemplateName] = useState('');
@@ -951,8 +968,8 @@ export function GraphWorkspaceControls({
                   <div className="space-y-2 border-t border-border/40 pt-2.5">
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
-                        <div className="text-sm font-bold text-foreground">{stats.nodeCount}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Nodes</div>
+                        <div className="text-sm font-bold text-foreground">{stats.hierarchyCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Hierarchy</div>
                       </div>
                       <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
                         <div className="text-sm font-bold text-foreground">{stats.totalCount}</div>

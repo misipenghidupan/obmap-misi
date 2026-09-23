@@ -16,6 +16,7 @@ const CATEGORY_COLORS: Record<ModuleCategory, string> = {
   editor: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
   graph: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
   settings: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+  plugin: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
 };
 
 interface AppPreloaderScreenProps {

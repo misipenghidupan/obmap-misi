@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GraphConfigState } from './useGraphStore';
 import type { LayoutMode, MindmapOrientation } from '@/core/graph/model/graphTypes';
-import { defaultGraphConfig } from './useGraphStore';
+import { defaultGraphConfig, mergeGraphConfig } from './useGraphStore';
 
 export interface GraphTemplate {
   id: string;
@@ -72,7 +72,7 @@ export const useGraphTemplatesStore = create<GraphTemplatesState>()(
       getDefaultConfig: () => {
         const { templates, defaultTemplateId } = get();
         if (defaultTemplateId && templates[defaultTemplateId]) {
-          return JSON.parse(JSON.stringify(templates[defaultTemplateId].config));
+          return mergeGraphConfig(templates[defaultTemplateId].config);
         }
         return JSON.parse(JSON.stringify(defaultGraphConfig));
       },

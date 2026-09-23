@@ -217,6 +217,31 @@ export const defaultGraphConfig: GraphConfigState = {
   forces: defaultForceConfig,
 };
 
+/**
+ * Deep-merge any (possibly legacy/partial) config onto the defaults so
+ * consumers never see `undefined` sections like `config.nodes`.
+ */
+export function mergeGraphConfig(partial?: Partial<GraphConfigState> | null): GraphConfigState {
+  const p = (partial ?? {}) as Partial<GraphConfigState>;
+  return {
+    version: GRAPH_CONFIG_VERSION,
+    nodes: { ...defaultNodeConfig, ...(p.nodes ?? {}) },
+    links: { ...defaultLinkConfig, ...(p.links ?? {}) },
+    forces: { ...defaultForceConfig, ...(p.forces ?? {}) },
+    hierarchy: mergeHierarchyColorConfig(p.hierarchy),
+    topology: {
+      ...defaultTopologyConfig,
+      ...(p.topology ?? {}),
+      styles: {
+        hierarchy: { ...defaultTopologyConfig.styles.hierarchy, ...(p.topology?.styles?.hierarchy ?? {}) },
+        backlink: { ...defaultTopologyConfig.styles.backlink, ...(p.topology?.styles?.backlink ?? {}) },
+        tag: { ...defaultTopologyConfig.styles.tag, ...(p.topology?.styles?.tag ?? {}) },
+        semantic: { ...defaultTopologyConfig.styles.semantic, ...(p.topology?.styles?.semantic ?? {}) },
+      },
+    },
+  };
+}
+
 // ============= STORE INTERFACE =============
 
 interface GraphState {
