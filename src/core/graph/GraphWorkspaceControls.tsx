@@ -43,7 +43,14 @@ import { useGraphTemplatesStore, type GraphTemplate } from '@/shared/stores/useG
 import {
   useLeafGraphConfig,
   useLeafGraphConfigApi,
+  type LeafGraphConfigState,
 } from './model/useLeafGraphConfigStore';
+import type {
+  GraphConfigState,
+  NodeConfig,
+  LinkConfig,
+  ForceConfig,
+} from '@/shared/stores/useGraphStore';
 
 type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';

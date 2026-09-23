@@ -108,9 +108,10 @@ function GraphLeafBody({ leafId }: { leafId: string; isActive?: boolean }) {
 
 export default function GraphLeaf({ leaf, isActive = true }: LeafViewProps) {
   const interactionStore = useLeafGraphInteractionStore(leaf.id);
-  
+  const configStore = useLeafGraphConfigStore(leaf.id);
+
   return (
-    <LeafGraphConfigProvider leafId={leaf.id}>
+    <LeafGraphConfigProvider store={configStore}>
       <GraphInteractionProvider store={interactionStore}>
         <GraphLeafBody leafId={leaf.id} isActive={isActive} />
       </GraphInteractionProvider>
