@@ -5,15 +5,24 @@ import {
   useGraphInteractionStore,
   useLeafGraphInteractionStore,
 } from "@/core/graph/model/useGraphInteractionStore";
+import {
+  LeafGraphConfigProvider,
+  useLeafGraphConfig,
+} from "@/core/graph/model/useLeafGraphConfigStore";
 import { useGraphStore } from "@/shared/stores";
 import { useVaultSession } from "../VaultSessionContext";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { LeafViewProps } from "../ViewRegistry";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
-function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?: boolean }) {
+function GraphLeafBody({ leafId }: { leafId: string; isActive?: boolean }) {
   const { graphData, selectedNode, setSelectedNode } = useVaultSession();
-  const graphConfig = useGraphStore((s) => s.config);
+  
+  // Ambil config dari store lokal tab ini (fallback ke global store bila di luar provider)
+  const localConfig = useLeafGraphConfig((s) => s.config);
+  const fallbackConfig = useGraphStore((s) => s.config);
+  const graphConfig = localConfig ?? fallbackConfig;
+
   const {
     layoutMode,
     setLayoutMode,
@@ -26,12 +35,14 @@ function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?:
     focusedRootId,
     setFocusedRoot,
   } = useGraphInteractionStore();
+
   const [search, setSearch] = useState("");
   const [minDepth, setMinDepth] = useState(0);
   const [maxDepth, setMaxDepth] = useState(10);
   const [contentFilter, setContentFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const graphRef = useRef<GraphCanvasHandle>(null);
+
   const handleSmartZoom = (action: SmartZoomAction) => graphRef.current?.smartZoom(action);
 
   const handleSelect = (node: typeof selectedNode) => {
@@ -44,7 +55,6 @@ function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?:
     }
   };
 
-
   return (
     <div className="relative w-full h-full">
       <GraphCanvas
@@ -52,7 +62,7 @@ function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?:
         graphData={graphData}
         selectedNode={selectedNode}
         onNodeSelect={handleSelect}
-        onNodeOpen={handleOpen} 
+        onNodeOpen={handleOpen}
         graphConfig={graphConfig}
         search={search}
         minDepth={minDepth}
@@ -97,10 +107,13 @@ function GraphLeafBody({ leafId, isActive = true }: { leafId: string; isActive?:
 }
 
 export default function GraphLeaf({ leaf, isActive = true }: LeafViewProps) {
-  const store = useLeafGraphInteractionStore(leaf.id);
+  const interactionStore = useLeafGraphInteractionStore(leaf.id);
+  
   return (
-    <GraphInteractionProvider store={store}>
-      <GraphLeafBody isActive={isActive} />
-    </GraphInteractionProvider>
+    <LeafGraphConfigProvider leafId={leaf.id}>
+      <GraphInteractionProvider store={interactionStore}>
+        <GraphLeafBody leafId={leaf.id} isActive={isActive} />
+      </GraphInteractionProvider>
+    </LeafGraphConfigProvider>
   );
 }

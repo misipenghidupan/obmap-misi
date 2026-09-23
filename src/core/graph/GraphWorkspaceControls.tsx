@@ -40,6 +40,10 @@ import { useGraphInteractionStore } from './model/useGraphInteractionStore';
 import { toast } from 'sonner';
 import { Badge } from '@/shared/ui/badge';
 import { useGraphTemplatesStore, type GraphTemplate } from '@/shared/stores/useGraphTemplatesStore';
+import {
+  useLeafGraphConfig,
+  useLeafGraphConfigApi,
+} from './model/useLeafGraphConfigStore';
 
 type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';
@@ -125,27 +129,29 @@ export function GraphWorkspaceControls({
   // Kontrol gear: toggle menu icon button ke bawah
   const [isGearOpen, setIsGearOpen] = useState(true);
   const [activePanel, setActivePanel] = useState<SettingGroup | null>(null);
+  const leafApi = useLeafGraphConfigApi();
+
+    // Ambil config lokal jika ada di dalam tab, jika tidak gunakan global
+  const localConfig = useLeafGraphConfig((s) => s.config);
+  const globalConfig = useGraphStore((s) => s.config);
+  const config = localConfig ?? globalConfig;
+
+  // Actions terisolasi per-tab
+  const setConfig = leafApi ? (cfg: any) => leafApi.getState().setConfig(cfg) : useGraphStore.getState().setConfig;
+  const updateNodeConfig = leafApi ? (upd: any) => leafApi.getState().updateNodeConfig(upd) : useGraphStore.getState().updateNodeConfig;
+  const updateLinkConfig = leafApi ? (upd: any) => leafApi.getState().updateLinkConfig(upd) : useGraphStore.getState().updateLinkConfig;
+  const updateForceConfig = leafApi ? (upd: any) => leafApi.getState().updateForceConfig(upd) : useGraphStore.getState().updateForceConfig;
+  const resetConfig = leafApi ? () => leafApi.getState().resetConfig() : useGraphStore.getState().resetConfig;
 
   // 1. Local state untuk input nama template baru
   const [templateName, setTemplateName] = useState('');
-
-  // 2. Selectors Graph Store
-  const setConfig = useGraphStore((s) => s.setConfig);
-
-  // 3. Selectors Graph Templates Store
   const templates = useGraphTemplatesStore((s) => s.templates);
   const defaultTemplateId = useGraphTemplatesStore((s) => s.defaultTemplateId);
   const saveTemplate = useGraphTemplatesStore((s) => s.saveTemplate);
   const deleteTemplate = useGraphTemplatesStore((s) => s.deleteTemplate);
   const setDefaultTemplate = useGraphTemplatesStore((s) => s.setDefaultTemplate);
-
-  const config = useGraphStore((s) => s.config);
+  
   const stats = useGraphStore((s) => s.stats);
-  const updateNodeConfig = useGraphStore((s) => s.updateNodeConfig);
-  const updateLinkConfig = useGraphStore((s) => s.updateLinkConfig);
-  const updateForceConfig = useGraphStore((s) => s.updateForceConfig);
-  const resetConfig = useGraphStore((s) => s.resetConfig);
-
   const requestReheat = useGraphInteractionStore((s) => s.requestReheat);
   const requestStop = useGraphInteractionStore((s) => s.requestStop);
 
@@ -369,8 +375,9 @@ export function GraphWorkspaceControls({
       </TooltipTrigger>
       <TooltipContent side="left">Graph Global & Templates</TooltipContent>
     </Tooltip>
-
-                {/* Expand All / Clear Focus Indicator */}
+              </div>
+            )}
+                            {/* Expand All / Clear Focus Indicator */}
     {(collapsedCount > 0 || focused) && (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -393,8 +400,6 @@ export function GraphWorkspaceControls({
         </TooltipContent>
       </Tooltip>
     )}
-              </div>
-            )}
           </div>
 
           {/* Quick Zoom Actions */}

@@ -514,13 +514,39 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     // Re-fit when the layout mode changes, not on every data tick.
   }, [layoutMode, orientation]);
 
-  useImperativeHandle(ref, () => ({
-    refresh: () => {
-    },
+// SESUDAH:
+useImperativeHandle(
+  ref,
+  () => ({
+    refresh: () => {},
     smartZoom: (action) => {
-      // ... tetap seperti semula
+      const graph = graphRef.current;
+      if (!graph) return;
+
+      // 1. Zoom to fit: sesuaikan viewport agar mencakup seluruh node yang terlihat
+      if (action === 'fit') {
+        graph.zoomToFit?.(500, 60);
+        return;
+      }
+
+      // 2. Zoom to selection: fokus dan perbesar ke node yang sedang dipilih
+      if (action === 'selection') {
+        const targetId = selectedNode?.id;
+        const selected = data.nodes.find((node) => node.id === targetId);
+        if (!selected || selected.x === undefined || selected.y === undefined) return;
+        
+        graph.centerAt?.(selected.x, selected.y, 450);
+        graph.zoom?.(2.25, 450);
+        return;
+      }
+
+      // 3. Fallback / reset: kembali ke titik pusat default
+      graph.centerAt?.(0, 0, 400);
+      graph.zoom?.(1, 400);
     },
-  }), [data.nodes, selectedNode?.id]);
+  }),
+  [data.nodes, selectedNode?.id]
+);
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
