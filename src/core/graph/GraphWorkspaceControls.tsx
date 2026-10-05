@@ -33,7 +33,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import type { LayoutMode, MindmapOrientation } from './model/graphTypes';
+import type { CanvasMode, LayoutMode, MindmapOrientation } from './model/graphTypes';
 import { useGraphStore } from '@/shared/stores';
 import { useGraphInteractionStore } from './model/useGraphInteractionStore';
 // Tambahkan import store, UI, dan toast berikut:
@@ -127,11 +127,20 @@ const LABEL_MODES: { value: LabelMode; label: string }[] = [
   { value: 'boxes', label: '+ Boxes' },
 ];
 
-const LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
+const GRAPH_LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
   { value: 'free-force', label: 'Free force', icon: Network },
+  { value: 'fr-standard', label: 'Spring (F-R)', icon: Sparkles },
+  { value: 'fr-radial', label: 'Radial spread', icon: Circle },
+  { value: 'kamada-kawai', label: 'Kamada-Kawai', icon: Zap },
+  { value: 'grid', label: 'Grid', icon: SlidersHorizontal },
+];
+
+const MINDMAP_LAYOUTS: { value: LayoutMode; label: string; icon: typeof Network }[] = [
   { value: 'mindmap', label: 'Mindmap', icon: GitBranch },
+  { value: 'org-chart', label: 'Org chart', icon: Network },
+  { value: 'brace-map', label: 'Brace map', icon: SlidersHorizontal },
   { value: 'timeline', label: 'Timeline', icon: Clock3 },
-  { value: 'fishbone', label: 'Fishbone', icon: SlidersHorizontal },
+  { value: 'fishbone', label: 'Fishbone', icon: GitBranch },
 ];
 
 const NODE_SHAPES = [
@@ -154,6 +163,7 @@ export type SmartZoomAction = 'fit' | 'selection' | 'reset';
 
 interface GraphWorkspaceControlsProps {
   layout: LayoutMode;
+  canvasMode?: CanvasMode;
   onLayoutChange: (layout: LayoutMode) => void;
   orientation: MindmapOrientation;
   onOrientationChange: (orientation: MindmapOrientation) => void;
@@ -178,6 +188,7 @@ interface GraphWorkspaceControlsProps {
 
 export function GraphWorkspaceControls({
   layout,
+  canvasMode = 'graph',
   onLayoutChange,
   orientation,
   onOrientationChange,
@@ -637,7 +648,7 @@ export function GraphWorkspaceControls({
                   <div className="space-y-1.5">
                     <Label className="text-[11px] text-muted-foreground">Layout Algorithm</Label>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {LAYOUTS.map((item) => {
+                      {(canvasMode === 'graph' ? GRAPH_LAYOUTS : MINDMAP_LAYOUTS).map((item) => {
                         const Icon = item.icon;
                         return (
                           <Button
