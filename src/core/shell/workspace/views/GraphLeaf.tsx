@@ -14,9 +14,9 @@ import { useGraphStore } from "@/shared/stores";
 import { useVaultSession } from "../VaultSessionContext";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { LeafViewProps } from "../ViewRegistry";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-function GraphLeafBody({ leafId }: { leafId: string; isActive?: boolean }) {
+function GraphLeafBody({ leafId, canvasMode: requestedMode }: { leafId: string; isActive?: boolean; canvasMode?: "graph" | "mindmap" }) {
   const { graphData, selectedNode, setSelectedNode } = useVaultSession();
   
   // Ambil config dari store lokal tab ini (fallback ke global store bila di luar provider)
@@ -35,7 +35,21 @@ function GraphLeafBody({ leafId }: { leafId: string; isActive?: boolean }) {
     expandAll,
     focusedRootId,
     setFocusedRoot,
+    canvasMode,
+    setCanvasMode,
   } = useGraphInteractionStore();
+
+  // The ribbon / shortcuts set the requested mode on the tab's view state.
+  useEffect(() => {
+    if (requestedMode) setCanvasMode(requestedMode);
+  }, [requestedMode, setCanvasMode]);
+
+  // Keep the tab title in sync with the active mode.
+  useEffect(() => {
+    const title = canvasMode === "mindmap" ? "Mindmap View" : "Graph View";
+    const ws = useWorkspaceStore.getState() as unknown as { renameLeaf?: (id: string, t: string) => void };
+    ws.renameLeaf?.(leafId, title);
+  }, [canvasMode, leafId]);
 
   const [search, setSearch] = useState("");
   const [minDepth, setMinDepth] = useState(0);
@@ -74,6 +88,7 @@ function GraphLeafBody({ leafId }: { leafId: string; isActive?: boolean }) {
 
       <GraphWorkspaceControls
         layout={layoutMode}
+        canvasMode={canvasMode}
         onLayoutChange={setLayoutMode}
         orientation={orientation}
         onOrientationChange={setOrientation}
@@ -114,7 +129,7 @@ export default function GraphLeaf({ leaf, isActive = true }: LeafViewProps) {
   return (
     <LeafGraphConfigProvider store={configStore}>
       <GraphInteractionProvider store={interactionStore}>
-        <GraphLeafBody leafId={leaf.id} isActive={isActive} />
+        <GraphLeafBody leafId={leaf.id} isActive={isActive} canvasMode={leaf.view.canvasMode} />
       </GraphInteractionProvider>
     </LeafGraphConfigProvider>
   );
