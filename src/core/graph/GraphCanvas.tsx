@@ -265,11 +265,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         }
       }
     }
+    
     const links = projection.links.filter((link) => {
       const source = typeof link.source === 'string' ? link.source : link.source.id;
       const target = typeof link.target === 'string' ? link.target : link.target.id;
+
+      // Di mode mindmap, hanya tampilkan link hierarki pohon (kecuali jika user menyalakan backlink di config)
+      if (canvasMode === 'mindmap' && link.type !== 'hierarchy') {
+        return false;
+      }
+
       return visible.has(source) && visible.has(target) && topologyEnabled(link.type, graphConfig);
     });
+
     return { nodes, links };
   }, [projection, visibleIds, graphConfig, geometry.targets, layoutMode]);
 
@@ -655,43 +663,34 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const handleNodeDragEnd = useCallback(
     (node: RenderNode) => {
       if (canvasMode !== 'mindmap') return;
-          const hoveredTarget = findHoveredDropTarget(node, data.nodes, 60);
-    const validation = hoveredTarget
-      ? validateReparent(node, hoveredTarget, projection.parentByChild, projection.childrenByParent)
-      : { valid: false };
 
       const { hoveredTargetId, isValidDrop } = dragRef.current;
 
+      // 1. Eksekusi pemindahan parent jika valid
       if (isValidDrop && hoveredTargetId) {
-        // Valid: Reparent file/folder ke folder target
         onNodeMove?.(node.id, hoveredTargetId);
-      } else {
-        // Tidak valid: Revert ke posisi layout semula
-        const targetCoord = geometry.targets.get(node.id);
-        if (targetCoord) {
-          node.fx = targetCoord.x;
-          node.fy = targetCoord.y;
-          node.x = targetCoord.x;
-          node.y = targetCoord.y;
-        } else if (dragRef.current.draggedNodeOriginalPos) {
-          node.fx = dragRef.current.draggedNodeOriginalPos.x;
-          node.fy = dragRef.current.draggedNodeOriginalPos.y;
-        }
       }
 
-      // Bersihkan state drag
-      dragRef.current = {
-      draggedNodeId: node.id,
-      draggedNodeOriginalPos: dragRef.current.draggedNodeOriginalPos ?? { x: node.x ?? 0, y: node.y ?? 0 },
-      hoveredTargetId: hoveredTarget?.id ?? null,
-      isValidDrop: validation.valid,
-      dropReason: validation.reason,
-    };
+      // 2. Lepas penguncian koordinat (fx/fy) agar transitionController
+      //    bisa menggerakkan node secara mulus ke posisi slot barunya
+      delete node.fx;
+      delete node.fy;
 
+      // 3. Reset total state drag agar badge "masuk ke folder" & ring putus-putus HILANG
+      dragRef.current = {
+        draggedNodeId: null,
+        draggedNodeOriginalPos: null,
+        hoveredTargetId: null,
+        isValidDrop: false,
+        dropReason: undefined,
+      };
+
+      // 4. Minta kanvas me-render ulang frame bersih
       graphRef.current?.refresh?.();
     },
-    [canvasMode, geometry.targets, onNodeMove]
+    [canvasMode, onNodeMove]
   );
+
   
 
 
