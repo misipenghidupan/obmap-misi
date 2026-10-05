@@ -19,6 +19,9 @@ export interface DrawNodeState {
   config: NodeConfig;
   /** 0..1 pulse phase for animated glow; static halo when omitted. */
   glowPhase?: number;
+  isDragged?: boolean;
+  isDropTarget?: boolean;
+  dropTargetValid?: boolean;
 }
 
 /** Soft radial halo around a node marker, drawn beneath the node itself. */
@@ -139,7 +142,16 @@ export function drawNode(
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(detailScale, detailScale);
-  ctx.translate(-x, -y);
+  ctx.translate(-x, -y)
+
+  if (state.isDragged) {
+    ctx.scale(1.05, 1.05);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 6;
+  }
+
 
   const label = labelForNode(node, state.config);
   const fontSize = state.config.labelSize + (state.isRoot ? 2 : 0);
@@ -201,6 +213,34 @@ export function drawNode(
     ctx.stroke();
   }
   ctx.shadowBlur = 0;
+
+    // Indikator target folder reparenting
+  if (state.isDropTarget && state.dropTargetValid) {
+    ctx.save();
+    // Glow ring warna aksen
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(w, h) / 2 + 10, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Badge kecil "masuk ke folder" di atas kartu
+    const badgeText = "masuk ke folder";
+    ctx.font = cardFont(9, '600');
+    const badgeW = ctx.measureText(badgeText).width + 12;
+    const badgeY = y - h / 2 - 14;
+
+    ctx.fillStyle = accent;
+    roundedRect(ctx, x - badgeW / 2, badgeY - 8, badgeW, 16, 4);
+    ctx.fill();
+
+    ctx.fillStyle = theme.card;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, x, badgeY);
+    ctx.restore();
+  }
 
   if (state.showLabels && (state.preserveDetail || zoom >= state.labelThreshold * 0.6)) {
     const italic = state.config.labelFontStyle.includes('italic') ? 'italic ' : '';

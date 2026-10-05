@@ -24,6 +24,7 @@ export interface DrawLinkState {
   zoom: number;
   preserveDetail: boolean;
   metricOf: (node: RenderNode) => NodeMetric;
+  isAttachedToDragged?: boolean;
 }
 
 const cubicPoint = (p0: number, p1: number, p2: number, p3: number, t: number) => {
@@ -62,6 +63,13 @@ export function drawLink(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(start.x, start.y);
+  
+  const linkOpacity = state.isAttachedToDragged 
+    ? 0.35 
+    : state.dimmed ? 0.08 : state.opacity;
+
+  ctx.strokeStyle = dim(state.color, linkOpacity);
+
 
   let c1 = start;
   let c2 = end;

@@ -31,6 +31,13 @@ import { buildTheme } from './render/theme';
 import { GraphLevelLegend } from './GraphLevelLegend';
 import { resolveHierarchyLinkPaint, uniqueDepths } from './model/hierarchyColors';
 import { cardLayout } from './render/textLayout';
+// Tambahkan import ini di bagian atas bersama import interactions lainnya:
+import {
+  findHoveredDropTarget,
+  validateReparent,
+  type DragReparentState,
+} from './interactions/dragReparent';
+
 
 export interface GraphCanvasProps {
   graphData: { nodes: Node[]; links: Link[] };
@@ -38,6 +45,7 @@ export interface GraphCanvasProps {
   onNodeSelect: (node: Node | null) => void;
   onNodeOpen?: (node: Node) => void; 
   graphConfig: GraphConfigState;
+  onNodeMove?: (nodeId: string, newParentId: string | null) => Promise<void> | void;
   search: string;
   minDepth: number;
   maxDepth: number;
@@ -80,6 +88,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   selectedNode,
   onNodeSelect,
   onNodeOpen,
+  onNodeMove,
   graphConfig,
   search,
   minDepth,
@@ -98,6 +107,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const [size, setSize] = useState({ width: 800, height: 600 });
   const nodeCache = useRef(new Map<string, RenderNode>());
   const [selectedScreenCoords, setSelectedScreenCoords] = useState<{ x: number; y: number } | null>(null);
+  const [dragState, setDragState] = useState<DragReparentState>({
+    draggedNodeId: null,
+    draggedNodeOriginalPos: null,
+    hoveredTargetId: null,
+    isValidDrop: false,
+  });
+
 
 
   const engine = useGraphEngineStore();
@@ -392,6 +408,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         preserveDetail: engine.zoomOutRendering === 'full-detail',
         config: graphConfig.nodes,
         glowPhase: glowPhase.current,
+        isDragged: dragState.draggedNodeId === node.id,
+        isDropTarget: dragState.hoveredTargetId === node.id,
+        dropTargetValid: dragState.isValidDrop,
+
       });
     },
     [theme, selectedNode, hoveredId, pathway, collapsedIds, engine.showLabels, engine.labelZoomThreshold, engine.zoomOutRendering, graphConfig.nodes]
@@ -460,6 +480,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         zoom: zoomRef.current,
         preserveDetail: engine.zoomOutRendering === 'full-detail',
         metricOf,
+        isAttachedToDragged:
+        dragState.draggedNodeId !== null &&
+        (source.id === dragState.draggedNodeId || target.id === dragState.draggedNodeId),
       });
     },
     [graphConfig, layoutMode, theme, pathway, metricOf, engine.zoomOutRendering]
@@ -563,6 +586,86 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     [toggleCollapsed, setSelected, onNodeSelect, onNodeOpen, graphData.nodes]
   );
 
+    const handleNodeDrag = useCallback(
+    (node: RenderNode) => {
+      if (canvasMode !== 'mindmap') return;
+
+      // Catat posisi awal saat pertama kali mulai drag
+      if (dragState.draggedNodeId !== node.id) {
+        setDragState((prev) => ({
+          ...prev,
+          draggedNodeId: node.id,
+          draggedNodeOriginalPos: { x: node.x ?? 0, y: node.y ?? 0 },
+        }));
+      }
+
+      // Deteksi folder target di sekitar kursor
+      const hoveredTarget = findHoveredDropTarget(node, data.nodes, 50);
+      if (!hoveredTarget) {
+        if (dragState.hoveredTargetId !== null) {
+          setDragState((prev) => ({
+            ...prev,
+            hoveredTargetId: null,
+            isValidDrop: false,
+          }));
+        }
+        return;
+      }
+
+      const validation = validateReparent(
+        node,
+        hoveredTarget,
+        projection.parentByChild,
+        projection.childrenByParent
+      );
+
+      setDragState((prev) => ({
+        ...prev,
+        hoveredTargetId: hoveredTarget.id,
+        isValidDrop: validation.valid,
+        dropReason: validation.reason,
+      }));
+    },
+    [canvasMode, data.nodes, dragState.draggedNodeId, dragState.hoveredTargetId, projection]
+  );
+
+  const handleNodeDragEnd = useCallback(
+    (node: RenderNode) => {
+      if (canvasMode !== 'mindmap') return;
+
+      const { hoveredTargetId, isValidDrop } = dragState;
+
+      if (isValidDrop && hoveredTargetId) {
+        // Valid -> Reparent file/folder
+        onNodeMove?.(node.id, hoveredTargetId);
+      } else {
+        // Tidak valid -> Revert posisi ke koordinat layout target
+        const targetCoord = geometry.targets.get(node.id);
+        if (targetCoord) {
+          node.fx = targetCoord.x;
+          node.fy = targetCoord.y;
+          node.x = targetCoord.x;
+          node.y = targetCoord.y;
+        } else if (dragState.draggedNodeOriginalPos) {
+          node.fx = dragState.draggedNodeOriginalPos.x;
+          node.fy = dragState.draggedNodeOriginalPos.y;
+        }
+      }
+
+      // Reset state drag
+      setDragState({
+        draggedNodeId: null,
+        draggedNodeOriginalPos: null,
+        hoveredTargetId: null,
+        isValidDrop: false,
+      });
+
+      graphRef.current?.refresh?.();
+    },
+    [canvasMode, dragState, geometry.targets, onNodeMove]
+  );
+
+
   const handleHover = useCallback(
     (node: RenderNode | null) => setHovered(node?.id ?? null),
     [setHovered]
@@ -595,6 +698,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       setToolbarCoords({ x: screenPos.x, y: screenPos.y });
     }
   }, [selectedNode, canvasMode, data.nodes, toolbarCoords]);
+  
 
 
 useImperativeHandle(
@@ -651,7 +755,9 @@ useImperativeHandle(
           setSelected(null);
           onNodeSelect(null);
         }}
-        enableNodeDrag={layoutMode === 'free-force'}
+        enableNodeDrag={layoutMode === 'free-force' || canvasMode === 'mindmap'}
+        onNodeDrag={handleNodeDrag}
+        onNodeDragEnd={handleNodeDragEnd}
         dagMode={layoutMode === 'free-force' && graphConfig.forces.dagMode !== 'null' ? graphConfig.forces.dagMode : null}
         dagLevelDistance={graphConfig.forces.dagLevelDistance}
         warmupTicks={layoutMode === 'free-force' ? graphConfig.forces.warmupTicks : 0}

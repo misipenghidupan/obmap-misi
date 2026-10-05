@@ -18,7 +18,8 @@ import type { ViewState } from "../store/types";
 import { useEffect, useRef, useState } from "react";
 
 function GraphLeafBody({ leafId, canvasMode: requestedMode, view }: { leafId: string; view?: ViewState; isActive?: boolean; canvasMode?: "graph" | "mindmap" }) {
-  const { graphData, selectedNode, setSelectedNode } = useVaultSession();
+
+  const { graphData, selectedNode, setSelectedNode, onNodeMove } = useVaultSession()
   
   // Ambil config dari store lokal tab ini (fallback ke global store bila di luar provider)
   const localConfig = useLeafGraphConfig((s) => s.config);
@@ -80,6 +81,7 @@ function GraphLeafBody({ leafId, canvasMode: requestedMode, view }: { leafId: st
         selectedNode={selectedNode}
         onNodeSelect={handleSelect}
         onNodeOpen={handleOpen}
+        onNodeMove={onNodeMove}
         graphConfig={graphConfig}
         search={search}
         minDepth={minDepth}
