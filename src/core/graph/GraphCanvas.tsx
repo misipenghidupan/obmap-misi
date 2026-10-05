@@ -18,6 +18,7 @@ import { buildGraphProjection } from './model/buildGraphProjection';
 import type { NodeMetric, RenderNode, RenderLink } from './model/graphTypes';
 import { useGraphInteractionStore } from './model/useGraphInteractionStore';
 import { useLayoutEngine } from './layout/useLayoutEngine';
+import { ContextualToolbar } from './interactions/ContextualToolbar';
 import {
   LayoutTransitionController,
   prefersReducedMotion,
@@ -96,21 +97,31 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const glowStartedAt = useRef(performance.now());
   const [size, setSize] = useState({ width: 800, height: 600 });
   const nodeCache = useRef(new Map<string, RenderNode>());
+  const [selectedScreenCoords, setSelectedScreenCoords] = useState<{ x: number; y: number } | null>(null);
+
 
   const engine = useGraphEngineStore();
+  // SESUDAH (tambahkan canvasMode dan state subtree override):
   const {
+    canvasMode,
     layoutMode,
     orientation,
     highlightMode,
     collapsedIds,
     hoveredId,
     focusedRootId,
+    subtreeLayoutOverrides,
+    branchColorOverrides,
+    setSubtreeLayoutOverride,
+    setBranchColorOverride,
+    setFocusedRoot,
     toggleCollapsed,
     setHovered,
     setSelected,
     setTransitionStatus,
     simulationCommand,
   } = useGraphInteractionStore();
+
 
   // ---- size ----------------------------------------------------------------
   useEffect(() => {
@@ -301,6 +312,41 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     particleStartedAt.current = performance.now();
     particleProgress.current = 0;
   }, [graphConfig.links.showParticles, graphConfig.links.particles, graphConfig.links.particleSpeed]);
+
+    useEffect(() => {
+    if (!selectedNode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Abaikan jika fokus sedang berada pada input teks, textarea, atau elemen editable
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // 1. Shortcut TAB: Buat child node baru di bawah node terpilih
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        // Panggil fungsi penambahan node
+        // Misal: onAddChildNode?.(selectedNode.id);
+      }
+
+      // 2. Shortcut DELETE / BACKSPACE: Hapus node terpilih
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        // Panggil fungsi dialog/konfirmasi hapus
+        // Misal: onDeleteNode?.(selectedNode.id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNode]);
+
 
   const particlesActive = graphConfig.links.showParticles && graphConfig.links.particles > 0;
   const glowAnimated =
@@ -528,7 +574,29 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     // Re-fit when the layout mode changes, not on every data tick.
   }, [layoutMode, orientation]);
 
-// SESUDAH:
+    // State untuk menyimpan posisi piksel toolbar di layar
+  const [toolbarCoords, setToolbarCoords] = useState<{ x: number; y: number } | null>(null);
+
+  // Update posisi toolbar saat node terpilih bergerak atau kamera digeser
+  const updateToolbarPosition = useCallback(() => {
+    if (!selectedNode || canvasMode !== 'mindmap' || !graphRef.current) {
+      if (toolbarCoords !== null) setToolbarCoords(null);
+      return;
+    }
+
+    const renderNode = data.nodes.find((n) => n.id === selectedNode.id);
+    if (!renderNode || renderNode.x === undefined || renderNode.y === undefined) {
+      if (toolbarCoords !== null) setToolbarCoords(null);
+      return;
+    }
+
+    const screenPos = graphRef.current.graph2ScreenCoords?.(renderNode.x, renderNode.y);
+    if (screenPos && Number.isFinite(screenPos.x) && Number.isFinite(screenPos.y)) {
+      setToolbarCoords({ x: screenPos.x, y: screenPos.y });
+    }
+  }, [selectedNode, canvasMode, data.nodes, toolbarCoords]);
+
+
 useImperativeHandle(
   ref,
   () => ({
@@ -607,6 +675,29 @@ useImperativeHandle(
         selectedNodeId={selectedNode?.id ?? null}
       />
 
+      {canvasMode === 'mindmap' && selectedNode && toolbarCoords && (
+        <ContextualToolbar
+          x={toolbarCoords.x}
+          y={toolbarCoords.y}
+          nodeId={selectedNode.id}
+          nodeName={selectedNode.name}
+          isFolder={selectedNode.type === 'folder'}
+          currentOverride={subtreeLayoutOverrides?.[selectedNode.id]}
+          currentColor={branchColorOverrides?.[selectedNode.id]}
+          isFocused={focusedRootId === selectedNode.id}
+          onSetStructure={(mode) => setSubtreeLayoutOverride(selectedNode.id, mode)}
+          onSetColor={(color) => setBranchColorOverride(selectedNode.id, color)}
+          onAddSub={() => {
+            // Logika Add Sub-node
+          }}
+          onToggleFocus={() =>
+            setFocusedRoot(focusedRootId === selectedNode.id ? null : selectedNode.id)
+          }
+          onDelete={() => {
+            // Logika Hapus Node
+          }}
+        />
+      )}
     </div>
   );
 });

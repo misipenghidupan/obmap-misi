@@ -55,6 +55,13 @@ export interface GraphInteractionState {
   focusedRootId: string | null;
   transitionStatus: TransitionStatus;
   simulationCommand: { type: 'reheat' | 'stop'; nonce: number } | null;
+  subtreeLayoutOverrides: Record<string, MindmapLayoutMode>;
+  branchColorOverrides: Record<string, string>;
+
+  setSubtreeLayoutOverride: (nodeId: string, layout: MindmapLayoutMode | null) => void;
+  setBranchColorOverride: (nodeId: string, color: string | null) => void;
+  clearSubtreeOverrides: () => void;
+
 
   setLayoutMode: (mode: LayoutMode) => void;
   /** Switch family; restores the last layout used in that family. */
@@ -92,6 +99,28 @@ const creator: StateCreator<GraphInteractionState> = (set) => ({
   focusedRootId: null,
   transitionStatus: 'idle',
   simulationCommand: null,
+    subtreeLayoutOverrides: {},
+  branchColorOverrides: {},
+
+  setSubtreeLayoutOverride: (nodeId, layout) =>
+    set((state) => {
+      const next = { ...state.subtreeLayoutOverrides };
+      if (!layout) delete next[nodeId];
+      else next[nodeId] = layout;
+      return { subtreeLayoutOverrides: next };
+    }),
+
+  setBranchColorOverride: (nodeId, color) =>
+    set((state) => {
+      const next = { ...state.branchColorOverrides };
+      if (!color) delete next[nodeId];
+      else next[nodeId] = color;
+      return { branchColorOverrides: next };
+    }),
+
+  clearSubtreeOverrides: () =>
+    set({ subtreeLayoutOverrides: {}, branchColorOverrides: {} }),
+
 
   setLayoutMode: (value) => set(layoutPatch(normalizeLayoutMode(value))),
   setCanvasMode: (canvasMode) =>

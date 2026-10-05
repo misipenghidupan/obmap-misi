@@ -16,6 +16,9 @@ export type CanvasMode = 'graph' | 'mindmap';
 export const GRAPH_LAYOUT_MODES: GraphLayoutMode[] = ['free-force', 'fr-standard', 'fr-radial', 'kamada-kawai', 'grid'];
 export const MINDMAP_LAYOUT_MODES: MindmapLayoutMode[] = ['mindmap', 'org-chart', 'brace-map', 'timeline', 'fishbone'];
 
+export type SubtreeLayoutMap = Record<string, MindmapLayoutMode>;
+export type BranchColorMap = Record<string, string>;
+
 export const canvasModeOf = (mode: LayoutMode): CanvasMode =>
   (GRAPH_LAYOUT_MODES as string[]).includes(mode) ? 'graph' : 'mindmap';
 export type MindmapOrientation = 'balanced' | 'radial';
