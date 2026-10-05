@@ -16,6 +16,8 @@ import { mindmapLayout } from './mindmap';
 import { timelineLayout } from './timeline';
 import { fishboneLayout } from './fishbone';
 import { freeForceLayout } from './freeForce';
+import { fruchtermanReingoldLayout, gridLayout, kamadaKawaiLayout } from './networkLayouts';
+import { braceMapLayout, orgChartLayout } from './treeLayouts';
 
 export interface LayoutEngineOptions {
   mode: LayoutMode;
@@ -55,7 +57,30 @@ export function computeLayout(
     return !parent || !visible.has(parent);
   });
 
+  const endpoint = (end: unknown) =>
+    typeof end === 'string' ? end : (end as { id?: string } | null)?.id ?? '';
+  const network = () => ({
+    ids: options.visibleIds,
+    edges: projection.links
+      .map((link) => [endpoint(link.source), endpoint(link.target)] as [string, string])
+      .filter(([a, b]) => visible.has(a) && visible.has(b)),
+    context,
+  });
+  const tree = { ids: options.visibleIds, roots, childrenOf, context };
+
   switch (options.mode) {
+    case 'fr-standard':
+      return fruchtermanReingoldLayout(network(), false);
+    case 'fr-radial':
+      return fruchtermanReingoldLayout(network(), true);
+    case 'kamada-kawai':
+      return kamadaKawaiLayout(network());
+    case 'grid':
+      return gridLayout(network(), (id) => projection.byId.get(id)?.name ?? id);
+    case 'org-chart':
+      return orgChartLayout(tree);
+    case 'brace-map':
+      return braceMapLayout(tree);
     case 'timeline':
       return timelineLayout({
         nodes: options.visibleIds.map((id) => ({

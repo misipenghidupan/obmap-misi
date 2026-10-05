@@ -22,6 +22,10 @@ export interface NodeConfig {
   sizeByDepth: boolean;
   depthSizeInterval: number;
   resolution: number;
+  /** Show folder nodes on the canvas. */
+  showFolderNodes: boolean;
+  /** Show file/note nodes on the canvas. */
+  showFileNodes: boolean;
   shape: 'circle' | 'square' | 'diamond' | 'triangle' | 'hexagon';
   visible: boolean;
   opacity: number;
@@ -123,6 +127,8 @@ export const defaultNodeConfig: NodeConfig = {
   sizeByDepth: false,
   depthSizeInterval: 1,
   resolution: 8,
+  showFolderNodes: true,
+  showFileNodes: true,
   shape: 'circle',
   visible: true,
   opacity: 1.0,

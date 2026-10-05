@@ -7,7 +7,17 @@
 
 import type { Link, Node } from '@/shared/stores/types';
 
-export type LayoutMode = 'mindmap' | 'timeline' | 'fishbone' | 'free-force';
+export type GraphLayoutMode = 'free-force' | 'fr-standard' | 'fr-radial' | 'kamada-kawai' | 'grid';
+export type MindmapLayoutMode = 'mindmap' | 'org-chart' | 'brace-map' | 'timeline' | 'fishbone';
+export type LayoutMode = GraphLayoutMode | MindmapLayoutMode;
+/** Which family of layouts a graph tab shows: network topology or folder hierarchy. */
+export type CanvasMode = 'graph' | 'mindmap';
+
+export const GRAPH_LAYOUT_MODES: GraphLayoutMode[] = ['free-force', 'fr-standard', 'fr-radial', 'kamada-kawai', 'grid'];
+export const MINDMAP_LAYOUT_MODES: MindmapLayoutMode[] = ['mindmap', 'org-chart', 'brace-map', 'timeline', 'fishbone'];
+
+export const canvasModeOf = (mode: LayoutMode): CanvasMode =>
+  (GRAPH_LAYOUT_MODES as string[]).includes(mode) ? 'graph' : 'mindmap';
 export type MindmapOrientation = 'balanced' | 'radial';
 
 export interface LayoutPoint {

@@ -32,7 +32,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { LayoutMode, MindmapOrientation } from './model/graphTypes';
 import { useGraphStore } from '@/shared/stores';
 import { useGraphInteractionStore } from './model/useGraphInteractionStore';
@@ -50,10 +50,76 @@ import type {
   NodeConfig,
   LinkConfig,
   ForceConfig,
+  TopologyConfig,
+  LinkStyle,
+  HierarchyColorConfig,
 } from '@/shared/stores/useGraphStore';
+import { useGraphEngineStore } from '@/shared/stores/useGraphEngineStore';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/shared/ui/collapsible';
+import { ColorPicker } from './config-panel/ColorPicker';
+import {
+  HierarchyColorControls,
+  HierarchyLinkColorControls,
+} from './config-panel/HierarchyColorControls';
+import { ChevronRight } from 'lucide-react';
 
 type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
 type LabelMode = 'nodes' | 'labels' | 'boxes';
+type LinkStyleType = keyof TopologyConfig['styles'];
+
+const LINK_STYLE_TYPES: { value: LinkStyleType; label: string }[] = [
+  { value: 'hierarchy', label: 'Hierarchy' },
+  { value: 'backlink', label: 'Backlinks' },
+  { value: 'tag', label: 'Tags' },
+  { value: 'semantic', label: 'Semantic' },
+];
+
+const LINE_STYLES: { value: LinkStyle['lineStyle']; label: string }[] = [
+  { value: 'solid', label: 'Solid' },
+  { value: 'dashed', label: 'Dashed' },
+  { value: 'dotted', label: 'Dotted' },
+];
+
+const LABEL_FIELDS: { value: NodeConfig['labelField']; label: string }[] = [
+  { value: 'name', label: 'Node Name' },
+  { value: 'id', label: 'Node ID' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const FONT_STYLES: { value: NodeConfig['labelFontStyle']; label: string }[] = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'bold', label: 'Bold' },
+  { value: 'italic', label: 'Italic' },
+  { value: 'bold-italic', label: 'Bold Italic' },
+];
+
+/** Collapsible sub-group inside a flyout panel. */
+function PanelSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="rounded-md border border-border/60 bg-secondary/20"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground">
+        <span>{title}</span>
+        <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-90')} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2.5 border-t border-border/50 px-2 py-2.5">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 const LABEL_MODES: { value: LabelMode; label: string }[] = [
   { value: 'nodes', label: 'Nodes' },
@@ -156,9 +222,39 @@ export function GraphWorkspaceControls({
   const updateForceConfig = leafApi
     ? (upd: Parameters<LeafGraphConfigState['setForceConfig']>[0]) => leafApi.getState().setForceConfig(upd)
     : (upd: Partial<ForceConfig>) => useGraphStore.getState().updateForceConfig(upd);
+  const updateTopologyConfig = leafApi
+    ? (upd: Parameters<LeafGraphConfigState['setTopologyConfig']>[0]) =>
+        leafApi.getState().setTopologyConfig(upd)
+    : (upd: Partial<TopologyConfig>) => useGraphStore.getState().updateTopologyConfig(upd);
+  const updateTopologyStyle = (type: LinkStyleType, upd: Partial<LinkStyle>) => {
+    if (leafApi) {
+      leafApi.getState().setTopologyConfig((prev) => ({
+        styles: { ...prev.styles, [type]: { ...prev.styles[type], ...upd } },
+      }));
+      return;
+    }
+    useGraphStore.getState().updateTopologyStyle(type, upd);
+  };
+  const updateHierarchyConfig = (upd: Partial<HierarchyColorConfig>) => {
+    if (leafApi) {
+      const prev = leafApi.getState().config.hierarchy;
+      leafApi.getState().setHierarchyConfig({ ...prev, ...upd });
+      return;
+    }
+    useGraphStore.getState().updateHierarchyConfig(upd);
+  };
   const resetConfig = leafApi
     ? () => leafApi.getState().resetToDefault()
     : () => useGraphStore.getState().resetConfig();
+
+  // Kamera & level-of-detail (engine store, dipakai langsung oleh canvas)
+  const zoomOutRendering = useGraphEngineStore((s) => s.zoomOutRendering);
+  const labelZoomThreshold = useGraphEngineStore((s) => s.labelZoomThreshold);
+  const patchEngine = useGraphEngineStore((s) => s.patch);
+
+  // Tipe link yang sedang diatur pada sub-grup per-type styling
+  const [styleType, setStyleType] = useState<LinkStyleType>('hierarchy');
+
 
   // 1. Local state untuk input nama template baru
   const [templateName, setTemplateName] = useState('');
@@ -457,7 +553,7 @@ export function GraphWorkspaceControls({
 
         {/* Panel Pop-up Konten Pengaturan di Kiri Toolbar */}
         {activePanel && (
-          <section className="pointer-events-auto flex max-h-[360px] min-h-[220px] w-[260px] flex-col rounded-lg border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150 sm:w-[280px]">
+          <section className="pointer-events-auto flex max-h-[420px] min-h-[220px] w-[260px] flex-col rounded-lg border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150 sm:w-[300px]">
             {/* Header Panel */}
             <header className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
               <div className="flex items-center gap-2">
@@ -578,6 +674,46 @@ export function GraphWorkspaceControls({
                     </div>
                   )}
 
+                  <div className="space-y-1.5 border-t border-border/60 pt-2.5">
+                    <Label className="text-[11px] text-muted-foreground">Zoom-Out Rendering</Label>
+                    <Select
+                      value={zoomOutRendering}
+                      onValueChange={(val) =>
+                        patchEngine({ zoomOutRendering: val as 'optimized' | 'full-detail' })
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="optimized" className="text-xs">
+                          Optimized
+                        </SelectItem>
+                        <SelectItem value="full-detail" className="text-xs">
+                          Keep full detail
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] leading-snug text-muted-foreground">
+                      Keep full detail preserves node cards, labels, and link weight while zooming
+                      out.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Label Zoom Threshold</span>
+                      <span>{labelZoomThreshold.toFixed(2)}x</span>
+                    </div>
+                    <Slider
+                      value={[labelZoomThreshold]}
+                      min={0.1}
+                      max={3}
+                      step={0.05}
+                      onValueChange={([v]) => patchEngine({ labelZoomThreshold: v })}
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between border-t border-border/60 pt-2.5">
                     <Label className="flex items-center gap-1.5 text-xs">
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -593,45 +729,110 @@ export function GraphWorkspaceControls({
 
               {/* 3. NODE APPEARANCE PANEL */}
               {activePanel === 'nodes' && (
-                <div className="space-y-3.5">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Shape</Label>
-                    <Select
-                      value={config.nodes.shape}
-                      onValueChange={(val: any) => updateNodeConfig({ shape: val })}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {NODE_SHAPES.map((s) => (
-                          <SelectItem key={s.value} value={s.value} className="text-xs">
-                            {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Labels display</Label>
-                    <div className="grid grid-cols-3 gap-1">
-                      {LABEL_MODES.map((item) => (
-                        <Button
-                          key={item.value}
-                          type="button"
-                          variant={labelMode === item.value ? 'secondary' : 'outline'}
-                          className="h-7 text-[11px]"
-                          onClick={() => setLabelMode(item.value)}
-                        >
-                          {item.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 border-t border-border/60 pt-2.5">
+                <div className="space-y-2">
+                  <PanelSection title="Node Types" defaultOpen>
                     <div className="flex items-center justify-between">
+                      <Label className="text-xs">Folder Nodes</Label>
+                      <Switch
+                        checked={config.nodes.showFolderNodes}
+                        onCheckedChange={(checked) => updateNodeConfig({ showFolderNodes: checked })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">File Nodes</Label>
+                      <Switch
+                        checked={config.nodes.showFileNodes}
+                        onCheckedChange={(checked) => updateNodeConfig({ showFileNodes: checked })}
+                      />
+                    </div>
+                  </PanelSection>
+
+                  <PanelSection title="Size & Geometry">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Shape</Label>
+                      <Select
+                        value={config.nodes.shape}
+                        onValueChange={(val) =>
+                          updateNodeConfig({ shape: val as NodeConfig['shape'] })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {NODE_SHAPES.map((s) => (
+                            <SelectItem key={s.value} value={s.value} className="text-xs">
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Relative Size</span>
+                        <span>{config.nodes.relSize}</span>
+                      </div>
+                      <Slider
+                        value={[config.nodes.relSize]}
+                        min={1}
+                        max={20}
+                        step={1}
+                        onValueChange={([v]) => updateNodeConfig({ relSize: v })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Size by hierarchy level</Label>
+                      <Switch
+                        checked={config.nodes.sizeByDepth}
+                        onCheckedChange={(checked) => updateNodeConfig({ sizeByDepth: checked })}
+                      />
+                    </div>
+
+                    {config.nodes.sizeByDepth && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Level size interval</span>
+                          <span>{config.nodes.depthSizeInterval.toFixed(2)}px</span>
+                        </div>
+                        <Slider
+                          value={[config.nodes.depthSizeInterval]}
+                          min={0.25}
+                          max={4}
+                          step={0.25}
+                          onValueChange={([v]) => updateNodeConfig({ depthSizeInterval: v })}
+                        />
+                      </div>
+                    )}
+                  </PanelSection>
+
+                  <PanelSection title="Hierarchy Colors">
+                    <HierarchyColorControls
+                      hierarchy={config.hierarchy}
+                      onChange={updateHierarchyConfig}
+                    />
+                  </PanelSection>
+
+                  <PanelSection title="Colors & Glow">
+                    <ColorPicker
+                      label="Folder Color"
+                      value={config.nodes.folderColor}
+                      onChange={(val) => updateNodeConfig({ folderColor: val })}
+                    />
+                    <ColorPicker
+                      label="File Color"
+                      value={config.nodes.fileColor}
+                      onChange={(val) => updateNodeConfig({ fileColor: val })}
+                    />
+                    <ColorPicker
+                      label="Selected Color"
+                      value={config.nodes.selectedColor}
+                      onChange={(val) => updateNodeConfig({ selectedColor: val })}
+                    />
+
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
                       <Label className="text-xs">Glowing Nodes</Label>
                       <Switch
                         checked={config.nodes.glow}
@@ -640,7 +841,7 @@ export function GraphWorkspaceControls({
                     </div>
 
                     {config.nodes.glow && (
-                      <div className="space-y-2 rounded-md bg-secondary/30 p-2">
+                      <div className="space-y-2">
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
                             <span>Intensity</span>
@@ -657,7 +858,11 @@ export function GraphWorkspaceControls({
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
                             <span>Pulse Speed</span>
-                            <span>{config.nodes.glowSpeed === 0 ? 'Static' : `${config.nodes.glowSpeed.toFixed(1)}x`}</span>
+                            <span>
+                              {config.nodes.glowSpeed === 0
+                                ? 'Static'
+                                : `${config.nodes.glowSpeed.toFixed(1)}x`}
+                            </span>
                           </div>
                           <Slider
                             value={[config.nodes.glowSpeed]}
@@ -669,42 +874,304 @@ export function GraphWorkspaceControls({
                         </div>
                       </div>
                     )}
-                  </div>
+                  </PanelSection>
+
+                  <PanelSection title="Labels">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Labels display</Label>
+                      <div className="grid grid-cols-3 gap-1">
+                        {LABEL_MODES.map((item) => (
+                          <Button
+                            key={item.value}
+                            type="button"
+                            variant={labelMode === item.value ? 'secondary' : 'outline'}
+                            className="h-7 text-[11px]"
+                            onClick={() => setLabelMode(item.value)}
+                          >
+                            {item.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Show Labels</Label>
+                      <Switch
+                        checked={config.nodes.showLabels}
+                        onCheckedChange={(checked) => updateNodeConfig({ showLabels: checked })}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Label source field</Label>
+                      <Select
+                        value={config.nodes.labelField}
+                        onValueChange={(val) =>
+                          updateNodeConfig({ labelField: val as NodeConfig['labelField'] })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LABEL_FIELDS.map((f) => (
+                            <SelectItem key={f.value} value={f.value} className="text-xs">
+                              {f.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Label Size</span>
+                        <span>{config.nodes.labelSize}px</span>
+                      </div>
+                      <Slider
+                        value={[config.nodes.labelSize]}
+                        min={8}
+                        max={32}
+                        step={1}
+                        onValueChange={([v]) => updateNodeConfig({ labelSize: v })}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Font style</Label>
+                      <Select
+                        value={config.nodes.labelFontStyle}
+                        onValueChange={(val) =>
+                          updateNodeConfig({ labelFontStyle: val as NodeConfig['labelFontStyle'] })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_STYLES.map((f) => (
+                            <SelectItem key={f.value} value={f.value} className="text-xs">
+                              {f.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <ColorPicker
+                      label="Label Text Color"
+                      value={config.nodes.labelColor}
+                      onChange={(val) => updateNodeConfig({ labelColor: val })}
+                    />
+
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                      <Label className="text-xs">Label Box</Label>
+                      <Switch
+                        checked={config.nodes.labelBox}
+                        onCheckedChange={(checked) => updateNodeConfig({ labelBox: checked })}
+                      />
+                    </div>
+
+                    {config.nodes.labelBox && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Box Background</Label>
+                          <Switch
+                            checked={config.nodes.labelBackground}
+                            onCheckedChange={(checked) =>
+                              updateNodeConfig({ labelBackground: checked })
+                            }
+                          />
+                        </div>
+                        {config.nodes.labelBackground && (
+                          <ColorPicker
+                            label="Box Color"
+                            value={config.nodes.labelBackgroundColor}
+                            onChange={(val) => updateNodeConfig({ labelBackgroundColor: val })}
+                          />
+                        )}
+                      </>
+                    )}
+                  </PanelSection>
                 </div>
               )}
 
               {/* 4. LINKS & PARTICLES PANEL */}
               {activePanel === 'links' && (
-                <div className="space-y-3.5">
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Link Curvature</span>
-                      <span>{config.links.curvature.toFixed(2)}</span>
+                <div className="space-y-2">
+                  <PanelSection title="Link Types" defaultOpen>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Hierarchical Links</Label>
+                      <Switch
+                        checked={config.topology.showHierarchy}
+                        onCheckedChange={(checked) =>
+                          updateTopologyConfig({ showHierarchy: checked })
+                        }
+                      />
                     </div>
-                    <Slider
-                      value={[config.links.curvature]}
-                      min={0}
-                      max={0.8}
-                      step={0.05}
-                      onValueChange={([v]) => updateLinkConfig({ curvature: v })}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Link Thickness</span>
-                      <span>{config.links.width}px</span>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Backlink Connections</Label>
+                      <Switch
+                        checked={config.topology.showBacklinks}
+                        onCheckedChange={(checked) =>
+                          updateTopologyConfig({ showBacklinks: checked })
+                        }
+                      />
                     </div>
-                    <Slider
-                      value={[config.links.width]}
-                      min={0.5}
-                      max={5}
-                      step={0.5}
-                      onValueChange={([v]) => updateLinkConfig({ width: v })}
-                    />
-                  </div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Tag-Based Edges</Label>
+                      <Switch
+                        checked={config.topology.showTags}
+                        onCheckedChange={(checked) => updateTopologyConfig({ showTags: checked })}
+                      />
+                    </div>
+                    {config.topology.showTags && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>Tag Threshold</span>
+                          <span>
+                            {config.topology.tagThreshold} tag
+                            {config.topology.tagThreshold > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[config.topology.tagThreshold]}
+                          min={1}
+                          max={5}
+                          step={1}
+                          onValueChange={([v]) => updateTopologyConfig({ tagThreshold: v })}
+                        />
+                      </div>
+                    )}
+                  </PanelSection>
 
-                  <div className="space-y-2 border-t border-border/60 pt-2.5">
+                  <PanelSection title="Per-Type Styling">
+                    <div className="grid grid-cols-4 gap-1">
+                      {LINK_STYLE_TYPES.map((item) => (
+                        <Button
+                          key={item.value}
+                          type="button"
+                          variant={styleType === item.value ? 'secondary' : 'outline'}
+                          className="h-7 px-1 text-[10px]"
+                          onClick={() => setStyleType(item.value)}
+                        >
+                          {item.label}
+                        </Button>
+                      ))}
+                    </div>
+
+                    <ColorPicker
+                      label="Link Color"
+                      value={config.topology.styles[styleType].color}
+                      onChange={(val) => updateTopologyStyle(styleType, { color: val })}
+                    />
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] text-muted-foreground">Line Style</Label>
+                      <Select
+                        value={config.topology.styles[styleType].lineStyle}
+                        onValueChange={(val) =>
+                          updateTopologyStyle(styleType, {
+                            lineStyle: val as LinkStyle['lineStyle'],
+                          })
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LINE_STYLES.map((s) => (
+                            <SelectItem key={s.value} value={s.value} className="text-xs">
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Opacity</span>
+                        <span>
+                          {Math.round(config.topology.styles[styleType].opacity * 100)}%
+                        </span>
+                      </div>
+                      <Slider
+                        value={[config.topology.styles[styleType].opacity]}
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        onValueChange={([v]) => updateTopologyStyle(styleType, { opacity: v })}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Width</span>
+                        <span>{config.topology.styles[styleType].width}px</span>
+                      </div>
+                      <Slider
+                        value={[config.topology.styles[styleType].width]}
+                        min={0.5}
+                        max={5}
+                        step={0.5}
+                        onValueChange={([v]) => updateTopologyStyle(styleType, { width: v })}
+                      />
+                    </div>
+                  </PanelSection>
+
+                  <PanelSection title="Hierarchy Link Color">
+                    <HierarchyLinkColorControls
+                      hierarchy={config.hierarchy}
+                      onChange={updateHierarchyConfig}
+                    />
+                  </PanelSection>
+
+                  <PanelSection title="Global Link Geometry">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Link Curvature</span>
+                        <span>{config.links.curvature.toFixed(2)}</span>
+                      </div>
+                      <Slider
+                        value={[config.links.curvature]}
+                        min={0}
+                        max={0.8}
+                        step={0.05}
+                        onValueChange={([v]) => updateLinkConfig({ curvature: v })}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Link Thickness</span>
+                        <span>{config.links.width}px</span>
+                      </div>
+                      <Slider
+                        value={[config.links.width]}
+                        min={0.5}
+                        max={5}
+                        step={0.5}
+                        onValueChange={([v]) => updateLinkConfig({ width: v })}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Global Opacity</span>
+                        <span>{Math.round(config.links.opacity * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[config.links.opacity]}
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        onValueChange={([v]) => updateLinkConfig({ opacity: v })}
+                      />
+                    </div>
+                  </PanelSection>
+
+                  <PanelSection title="Particle Animations">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs">Particles Animation</Label>
                       <Switch
@@ -713,14 +1180,16 @@ export function GraphWorkspaceControls({
                           updateLinkConfig({
                             showParticles: checked,
                             ...(checked && config.links.particles < 1 ? { particles: 2 } : {}),
-                            ...(checked && config.links.particleSpeed <= 0 ? { particleSpeed: 0.01 } : {}),
+                            ...(checked && config.links.particleSpeed <= 0
+                              ? { particleSpeed: 0.01 }
+                              : {}),
                           })
                         }
                       />
                     </div>
 
                     {config.links.showParticles && (
-                      <div className="space-y-2 rounded-md bg-secondary/30 p-2">
+                      <div className="space-y-2">
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-muted-foreground">
                             <span>Count / link</span>
@@ -747,9 +1216,27 @@ export function GraphWorkspaceControls({
                             onValueChange={([v]) => updateLinkConfig({ particleSpeed: v })}
                           />
                         </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span>Particle Width</span>
+                            <span>{config.links.particleWidth}px</span>
+                          </div>
+                          <Slider
+                            value={[config.links.particleWidth]}
+                            min={1}
+                            max={10}
+                            step={0.5}
+                            onValueChange={([v]) => updateLinkConfig({ particleWidth: v })}
+                          />
+                        </div>
+                        <ColorPicker
+                          label="Particle Color"
+                          value={config.links.particleColor}
+                          onChange={(val) => updateLinkConfig({ particleColor: val })}
+                        />
                       </div>
                     )}
-                  </div>
+                  </PanelSection>
                 </div>
               )}
 
@@ -968,14 +1455,48 @@ export function GraphWorkspaceControls({
                   <div className="space-y-2 border-t border-border/40 pt-2.5">
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
+                        <div className="text-sm font-bold text-foreground">{stats.totalCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Connections</div>
+                      </div>
+                      <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
                         <div className="text-sm font-bold text-foreground">{stats.hierarchyCount}</div>
                         <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Hierarchy</div>
                       </div>
                       <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
-                        <div className="text-sm font-bold text-foreground">{stats.totalCount}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Links</div>
+                        <div className="text-sm font-bold text-foreground">{stats.backlinkCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Backlinks</div>
+                      </div>
+                      <div className="rounded-md border border-border/60 bg-secondary/30 p-1.5">
+                        <div className="text-sm font-bold text-foreground">{stats.tagCount}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Tags</div>
                       </div>
                     </div>
+
+                    {stats.topHubs.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                          Top Hubs
+                        </div>
+                        {stats.topHubs.slice(0, 3).map((hub, index) => (
+                          <div
+                            key={hub.nodeId}
+                            className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/30 px-2 py-1"
+                          >
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="text-[9px] font-mono text-muted-foreground">
+                                #{index + 1}
+                              </span>
+                              <span className="truncate text-[11px] text-foreground">
+                                {hub.nodeName}
+                              </span>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-mono text-muted-foreground">
+                              {hub.connectionCount}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <Button
                       variant="ghost"

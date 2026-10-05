@@ -179,6 +179,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       .filter((node) => {
         if (hidden.has(node.id)) return false;
         if (focusSet && !focusSet.has(node.id)) return false;
+        // Node type filters (folders vs files/notes).
+        if (!graphConfig.nodes.showFolderNodes && node.type === 'folder') return false;
+        if (!graphConfig.nodes.showFileNodes && node.type !== 'folder') return false;
         if (node.depth < minDepth || node.depth > maxDepth) return false;
         if (term && !node.name.toLowerCase().includes(term)) return false;
         if (content && !node.content.toLowerCase().includes(content)) return false;
@@ -187,7 +190,18 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         return true;
       })
       .map((node) => node.id);
-  }, [projection, collapsedIds, focusedRootId, search, contentFilter, tagFilter, minDepth, maxDepth]);
+  }, [
+    projection,
+    collapsedIds,
+    focusedRootId,
+    search,
+    contentFilter,
+    tagFilter,
+    minDepth,
+    maxDepth,
+    graphConfig.nodes.showFolderNodes,
+    graphConfig.nodes.showFileNodes,
+  ]);
 
   const geometry = useLayoutEngine(projection, {
     mode: layoutMode,
