@@ -109,6 +109,8 @@ export interface RenderNode {
   time?: number;
   category?: string;
   childCount: number;
+  branchId?: string;
+  branchColor?: string;
   x?: number;
   y?: number;
   vx?: number;

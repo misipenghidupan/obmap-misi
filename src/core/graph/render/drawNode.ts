@@ -242,6 +242,79 @@ export function drawNode(
     ctx.restore();
   }
 
+    // ============= COLLAPSE BADGE (TAHAP 6) =============
+  // — saat terbuka, pill +N saat tertutup
+  if (node.childCount > 0) {
+    ctx.save();
+    ctx.globalAlpha = state.dimmed ? 0.25 : 1;
+
+    if (state.collapsed) {
+      // 1. TAMPILAN PILL "+N" SAAT TERTUTUP
+      const pillText = `+${node.childCount}`;
+      ctx.font = cardFont(9, '700');
+      const textMetrics = ctx.measureText(pillText);
+      const pillW = Math.max(22, textMetrics.width + 10);
+      const pillH = 15;
+      const tx = x + (boxed ? w / 2 : markerRadius) + pillW / 2 + 3;
+      const ty = y;
+
+      // Gambar kapsul pill
+      ctx.fillStyle = theme.card;
+      roundedRect(ctx, tx - pillW / 2, ty - pillH / 2, pillW, pillH, pillH / 2);
+      ctx.fill();
+
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = accent;
+      ctx.stroke();
+
+      // Tulisan teks +N
+      ctx.fillStyle = accent;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pillText, tx, ty);
+
+      // Hit-area collapse toggle
+      node.toggle = {
+        x: x + (tx - x) * detailScale,
+        y: y + (ty - y) * detailScale,
+        r: Math.max(pillW / 2, 10) * detailScale,
+      };
+    } else {
+      // 2. TAMPILAN CIRCLE MINUS "—" SAAT TERBUKA
+      const r = 6;
+      const tx = x + (boxed ? w / 2 : markerRadius) + r + 2;
+      const ty = y;
+
+      ctx.beginPath();
+      ctx.arc(tx, ty, r, 0, Math.PI * 2);
+      ctx.fillStyle = theme.card;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = dim(accent, 0.7);
+      ctx.stroke();
+
+      // Garis minus —
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(tx - 3, ty);
+      ctx.lineTo(tx + 3, ty);
+      ctx.stroke();
+
+      // Hit-area collapse toggle
+      node.toggle = {
+        x: x + (tx - x) * detailScale,
+        y: y + (ty - y) * detailScale,
+        r: (r + 4) * detailScale,
+      };
+    }
+
+    ctx.restore();
+  } else {
+    node.toggle = null;
+  }
+
+
   if (state.showLabels && (state.preserveDetail || zoom >= state.labelThreshold * 0.6)) {
     const italic = state.config.labelFontStyle.includes('italic') ? 'italic ' : '';
     const weight = state.config.labelFontStyle.includes('bold') || state.isRoot ? '600' : '500';
@@ -309,6 +382,8 @@ export function drawNode(
   }
   ctx.restore();
 }
+
+
 
 /** Pointer area covers the card plus its toggle. */
 export function paintNodePointerArea(

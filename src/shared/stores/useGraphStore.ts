@@ -29,7 +29,7 @@ export interface NodeConfig {
   shape: 'circle' | 'square' | 'diamond' | 'triangle' | 'hexagon';
   visible: boolean;
   opacity: number;
-  autoColorBy: 'none' | 'type' | 'depth' | 'tags';
+  autoColorBy: 'none' | 'type' | 'depth' | 'tags' | 'branch';
   glow: boolean;
   glowIntensity: number;
   glowSpeed: number;

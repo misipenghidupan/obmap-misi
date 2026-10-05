@@ -67,12 +67,23 @@ export function ContextualToolbar({
   onToggleFocus,
   onDelete,
 }: ContextualToolbarProps) {
+
+     const toolbarWidth = 240;
+
+       const clampedX = typeof window !== 'undefined'
+    ? Math.max(12, Math.min(window.innerWidth - toolbarWidth - 12, x - toolbarWidth / 2))
+    : x - toolbarWidth / 2;
+
+  const clampedY = typeof window !== 'undefined'
+    ? Math.max(12, Math.min(window.innerHeight - 56, y - 56))
+    : y - 56;
+
   return (
     <div
-      className="absolute pointer-events-auto z-30 flex items-center gap-0.5 rounded-lg border bg-background/95 px-1 py-0.5 shadow-xl backdrop-blur-md transition-all duration-75 ease-out animate-in fade-in zoom-in-95"
+      className="absolute z-50 flex items-center gap-1 p-1 bg-card/95 backdrop-blur-md border border-border/80 shadow-xl rounded-lg animate-in fade-in zoom-in-95 duration-150"
       style={{
-        left: `${x}px`,
-        top: `${y - 12}px`,
+        left: `${clampedX}px`,
+        top: `${clampedY}px`,
         transform: "translate(-50%, -100%)",
       }}
       onClick={(e) => e.stopPropagation()}
