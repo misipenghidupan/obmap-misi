@@ -106,8 +106,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const glowStartedAt = useRef(performance.now());
   const [size, setSize] = useState({ width: 800, height: 600 });
   const nodeCache = useRef(new Map<string, RenderNode>());
-  const [selectedScreenCoords, setSelectedScreenCoords] = useState<{ x: number; y: number } | null>(null);
-  const [dragState, setDragState] = useState<DragReparentState>({
+    // Simpan state drag di Ref agar tidak memicu re-render canvas loop pada 60fps mouse drag
+  const dragRef = useRef<DragReparentState>({
     draggedNodeId: null,
     draggedNodeOriginalPos: null,
     hoveredTargetId: null,
@@ -139,6 +139,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   } = useGraphInteractionStore();
 
 
+  
   // ---- size ----------------------------------------------------------------
   useEffect(() => {
     const element = containerRef.current;
@@ -242,6 +243,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     rootId: focusedRootId ?? undefined,
     visibleIds,
     nodeMetrics: metrics,
+    subtreeOverrides: subtreeLayoutOverrides,
   });
 
   // ---- data handed to ForceGraph2D (stable object identities) --------------
@@ -408,10 +410,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         preserveDetail: engine.zoomOutRendering === 'full-detail',
         config: graphConfig.nodes,
         glowPhase: glowPhase.current,
-        isDragged: dragState.draggedNodeId === node.id,
-        isDropTarget: dragState.hoveredTargetId === node.id,
-        dropTargetValid: dragState.isValidDrop,
-
+        isDragged: dragRef.current.draggedNodeId === node.id,
+        isDropTarget: dragRef.current.hoveredTargetId === node.id,
+        dropTargetValid: dragRef.current.isValidDrop,
       });
     },
     [theme, selectedNode, hoveredId, pathway, collapsedIds, engine.showLabels, engine.labelZoomThreshold, engine.zoomOutRendering, graphConfig.nodes]
@@ -480,9 +481,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         zoom: zoomRef.current,
         preserveDetail: engine.zoomOutRendering === 'full-detail',
         metricOf,
-        isAttachedToDragged:
-        dragState.draggedNodeId !== null &&
-        (source.id === dragState.draggedNodeId || target.id === dragState.draggedNodeId),
       });
     },
     [graphConfig, layoutMode, theme, pathway, metricOf, engine.zoomOutRendering]
@@ -586,86 +584,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     [toggleCollapsed, setSelected, onNodeSelect, onNodeOpen, graphData.nodes]
   );
 
-    const handleNodeDrag = useCallback(
-    (node: RenderNode) => {
-      if (canvasMode !== 'mindmap') return;
-
-      // Catat posisi awal saat pertama kali mulai drag
-      if (dragState.draggedNodeId !== node.id) {
-        setDragState((prev) => ({
-          ...prev,
-          draggedNodeId: node.id,
-          draggedNodeOriginalPos: { x: node.x ?? 0, y: node.y ?? 0 },
-        }));
-      }
-
-      // Deteksi folder target di sekitar kursor
-      const hoveredTarget = findHoveredDropTarget(node, data.nodes, 50);
-      if (!hoveredTarget) {
-        if (dragState.hoveredTargetId !== null) {
-          setDragState((prev) => ({
-            ...prev,
-            hoveredTargetId: null,
-            isValidDrop: false,
-          }));
-        }
-        return;
-      }
-
-      const validation = validateReparent(
-        node,
-        hoveredTarget,
-        projection.parentByChild,
-        projection.childrenByParent
-      );
-
-      setDragState((prev) => ({
-        ...prev,
-        hoveredTargetId: hoveredTarget.id,
-        isValidDrop: validation.valid,
-        dropReason: validation.reason,
-      }));
-    },
-    [canvasMode, data.nodes, dragState.draggedNodeId, dragState.hoveredTargetId, projection]
-  );
-
-  const handleNodeDragEnd = useCallback(
-    (node: RenderNode) => {
-      if (canvasMode !== 'mindmap') return;
-
-      const { hoveredTargetId, isValidDrop } = dragState;
-
-      if (isValidDrop && hoveredTargetId) {
-        // Valid -> Reparent file/folder
-        onNodeMove?.(node.id, hoveredTargetId);
-      } else {
-        // Tidak valid -> Revert posisi ke koordinat layout target
-        const targetCoord = geometry.targets.get(node.id);
-        if (targetCoord) {
-          node.fx = targetCoord.x;
-          node.fy = targetCoord.y;
-          node.x = targetCoord.x;
-          node.y = targetCoord.y;
-        } else if (dragState.draggedNodeOriginalPos) {
-          node.fx = dragState.draggedNodeOriginalPos.x;
-          node.fy = dragState.draggedNodeOriginalPos.y;
-        }
-      }
-
-      // Reset state drag
-      setDragState({
-        draggedNodeId: null,
-        draggedNodeOriginalPos: null,
-        hoveredTargetId: null,
-        isValidDrop: false,
-      });
-
-      graphRef.current?.refresh?.();
-    },
-    [canvasMode, dragState, geometry.targets, onNodeMove]
-  );
-
-
   const handleHover = useCallback(
     (node: RenderNode | null) => setHovered(node?.id ?? null),
     [setHovered]
@@ -698,6 +616,82 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       setToolbarCoords({ x: screenPos.x, y: screenPos.y });
     }
   }, [selectedNode, canvasMode, data.nodes, toolbarCoords]);
+
+    const handleNodeDrag = useCallback(
+    (node: RenderNode) => {
+      if (canvasMode !== 'mindmap') return;
+
+      if (dragRef.current.draggedNodeId !== node.id) {
+        dragRef.current = {
+          draggedNodeId: node.id,
+          draggedNodeOriginalPos: { x: node.x ?? 0, y: node.y ?? 0 },
+          hoveredTargetId: null,
+          isValidDrop: false,
+        };
+      }
+
+      // Deteksi folder target di bawah kursor (jarak toleransi 60px)
+      const hoveredTarget = findHoveredDropTarget(node, data.nodes, 60);
+      if (!hoveredTarget) {
+        dragRef.current.hoveredTargetId = null;
+        dragRef.current.isValidDrop = false;
+        return;
+      }
+
+      const validation = validateReparent(
+        node,
+        hoveredTarget,
+        projection.parentByChild,
+        projection.childrenByParent
+      );
+
+      dragRef.current.hoveredTargetId = hoveredTarget.id;
+      dragRef.current.isValidDrop = validation.valid;
+      dragRef.current.dropReason = validation.reason;
+    },
+    [canvasMode, data.nodes, projection]
+  );
+
+  const handleNodeDragEnd = useCallback(
+    (node: RenderNode) => {
+      if (canvasMode !== 'mindmap') return;
+          const hoveredTarget = findHoveredDropTarget(node, data.nodes, 60);
+    const validation = hoveredTarget
+      ? validateReparent(node, hoveredTarget, projection.parentByChild, projection.childrenByParent)
+      : { valid: false };
+
+      const { hoveredTargetId, isValidDrop } = dragRef.current;
+
+      if (isValidDrop && hoveredTargetId) {
+        // Valid: Reparent file/folder ke folder target
+        onNodeMove?.(node.id, hoveredTargetId);
+      } else {
+        // Tidak valid: Revert ke posisi layout semula
+        const targetCoord = geometry.targets.get(node.id);
+        if (targetCoord) {
+          node.fx = targetCoord.x;
+          node.fy = targetCoord.y;
+          node.x = targetCoord.x;
+          node.y = targetCoord.y;
+        } else if (dragRef.current.draggedNodeOriginalPos) {
+          node.fx = dragRef.current.draggedNodeOriginalPos.x;
+          node.fy = dragRef.current.draggedNodeOriginalPos.y;
+        }
+      }
+
+      // Bersihkan state drag
+      dragRef.current = {
+      draggedNodeId: node.id,
+      draggedNodeOriginalPos: dragRef.current.draggedNodeOriginalPos ?? { x: node.x ?? 0, y: node.y ?? 0 },
+      hoveredTargetId: hoveredTarget?.id ?? null,
+      isValidDrop: validation.valid,
+      dropReason: validation.reason,
+    };
+
+      graphRef.current?.refresh?.();
+    },
+    [canvasMode, geometry.targets, onNodeMove]
+  );
   
 
 
@@ -749,6 +743,9 @@ useImperativeHandle(
         linkCanvasObject={paintLink}
         linkCanvasObjectMode={() => 'replace'}
         onRenderFramePre={renderDecorations}
+        onRenderFramePost={updateToolbarPosition}
+        onZoom={updateToolbarPosition}
+        onZoomEnd={updateToolbarPosition}
         onNodeClick={handleClick}
         onNodeHover={handleHover}
         onBackgroundClick={() => {

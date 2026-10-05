@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { 
   GitBranch, 
   Palette, 
@@ -67,20 +66,20 @@ export function ContextualToolbar({
   onToggleFocus,
   onDelete,
 }: ContextualToolbarProps) {
-
-     const toolbarWidth = 240;
-
-       const clampedX = typeof window !== 'undefined'
-    ? Math.max(12, Math.min(window.innerWidth - toolbarWidth - 12, x - toolbarWidth / 2))
-    : x - toolbarWidth / 2;
+  const toolbarWidth = 260;
+  
+  // Clamping x dan y agar toolbar selalu di dalam viewport layar
+  const clampedX = typeof window !== 'undefined'
+    ? Math.max(toolbarWidth / 2 + 12, Math.min(window.innerWidth - toolbarWidth / 2 - 12, x))
+    : x;
 
   const clampedY = typeof window !== 'undefined'
-    ? Math.max(12, Math.min(window.innerHeight - 56, y - 56))
-    : y - 56;
+    ? Math.max(50, Math.min(window.innerHeight - 20, y - 18))
+    : y - 18;
 
   return (
     <div
-      className="absolute z-50 flex items-center gap-1 p-1 bg-card/95 backdrop-blur-md border border-border/80 shadow-xl rounded-lg animate-in fade-in zoom-in-95 duration-150"
+      className="absolute z-50 flex items-center gap-1 p-1 bg-card/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-lg animate-in fade-in zoom-in-95 duration-150 select-none pointer-events-auto"
       style={{
         left: `${clampedX}px`,
         top: `${clampedY}px`,
@@ -91,21 +90,21 @@ export function ContextualToolbar({
       {/* 1. Structure Override Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 hover:bg-accent/50">
             <GitBranch className="h-3.5 w-3.5 text-primary" />
-            <span className="max-w-[80px] truncate">
+            <span className="max-w-[85px] truncate font-medium">
               {currentOverride ?? "Structure"}
             </span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-48 text-xs">
-          <DropdownMenuLabel>Subtree Layout</DropdownMenuLabel>
+        <DropdownMenuContent align="start" className="w-52 text-xs">
+          <DropdownMenuLabel>Subtree Layout Override</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {MINDMAP_STRUCTURES.map((s) => (
             <DropdownMenuItem
               key={s.mode}
               onClick={() => onSetStructure(s.mode)}
-              className="flex items-center justify-between"
+              className="flex items-center justify-between cursor-pointer"
             >
               <span>{s.label}</span>
               {currentOverride === s.mode && <Check className="h-3.5 w-3.5 text-primary" />}
@@ -116,7 +115,7 @@ export function ContextualToolbar({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => onSetStructure(null)}
-                className="text-muted-foreground gap-1.5"
+                className="text-muted-foreground gap-1.5 cursor-pointer"
               >
                 <RotateCcw className="h-3 w-3" />
                 Reset to Tree Default
@@ -131,7 +130,7 @@ export function ContextualToolbar({
       {/* 2. Branch Color Picker */}
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-accent/50" title="Change Branch Color">
             <Palette
               className="h-3.5 w-3.5"
               style={{ color: currentColor || "currentColor" }}
@@ -150,7 +149,7 @@ export function ContextualToolbar({
                 style={{ backgroundColor: c }}
                 onClick={() => onSetColor(c)}
               >
-                {currentColor === c && <Check className="h-3 w-3 text-white" />}
+                {currentColor === c && <Check className="h-3 w-3 text-white drop-shadow" />}
               </button>
             ))}
           </div>
@@ -167,11 +166,13 @@ export function ContextualToolbar({
         </PopoverContent>
       </Popover>
 
-      {/* 3. Add Sub-node */}
+      <div className="h-4 w-px bg-border my-auto" />
+
+      {/* 3. Add Sub-Node (Tab Shortcut) */}
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 px-2 text-xs gap-1"
+        className="h-7 px-2 text-xs gap-1 hover:bg-accent/50"
         onClick={onAddSub}
         title="Add Sub-note (Tab)"
       >
@@ -179,26 +180,24 @@ export function ContextualToolbar({
         <span>Sub</span>
       </Button>
 
-      {/* 4. Focus Tree Root */}
+      {/* 4. Focus Subtree */}
       <Button
-        variant={isFocused ? "secondary" : "ghost"}
+        variant="ghost"
         size="sm"
-        className="h-7 w-7 p-0"
+        className={`h-7 w-7 p-0 hover:bg-accent/50 ${isFocused ? "text-primary" : ""}`}
         onClick={onToggleFocus}
-        title={isFocused ? "Unfocus Root" : "Focus on this Branch"}
+        title={isFocused ? "Unfocus (Show All)" : "Focus Subtree"}
       >
         <Focus className="h-3.5 w-3.5" />
       </Button>
-
-      <div className="h-4 w-px bg-border my-auto" />
 
       {/* 5. Delete Node */}
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+        className="h-7 w-7 p-0 text-destructive/80 hover:text-destructive hover:bg-destructive/10"
         onClick={onDelete}
-        title="Delete (Del)"
+        title="Delete Node (Delete)"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
