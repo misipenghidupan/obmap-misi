@@ -14,9 +14,10 @@ import { useGraphStore } from "@/shared/stores";
 import { useVaultSession } from "../VaultSessionContext";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { LeafViewProps } from "../ViewRegistry";
+import type { ViewState } from "../store/types";
 import { useEffect, useRef, useState } from "react";
 
-function GraphLeafBody({ leafId, canvasMode: requestedMode }: { leafId: string; isActive?: boolean; canvasMode?: "graph" | "mindmap" }) {
+function GraphLeafBody({ leafId, canvasMode: requestedMode, view }: { leafId: string; view?: ViewState; isActive?: boolean; canvasMode?: "graph" | "mindmap" }) {
   const { graphData, selectedNode, setSelectedNode } = useVaultSession();
   
   // Ambil config dari store lokal tab ini (fallback ke global store bila di luar provider)
@@ -47,9 +48,10 @@ function GraphLeafBody({ leafId, canvasMode: requestedMode }: { leafId: string; 
   // Keep the tab title in sync with the active mode.
   useEffect(() => {
     const title = canvasMode === "mindmap" ? "Mindmap View" : "Graph View";
-    const ws = useWorkspaceStore.getState() as unknown as { renameLeaf?: (id: string, t: string) => void };
-    ws.renameLeaf?.(leafId, title);
-  }, [canvasMode, leafId]);
+    if (view && view.title !== title) {
+      useWorkspaceStore.getState().setLeafView(leafId, { ...view, title });
+    }
+  }, [canvasMode, leafId, view]);
 
   const [search, setSearch] = useState("");
   const [minDepth, setMinDepth] = useState(0);
@@ -129,7 +131,7 @@ export default function GraphLeaf({ leaf, isActive = true }: LeafViewProps) {
   return (
     <LeafGraphConfigProvider store={configStore}>
       <GraphInteractionProvider store={interactionStore}>
-        <GraphLeafBody leafId={leaf.id} isActive={isActive} canvasMode={leaf.view.canvasMode} />
+        <GraphLeafBody leafId={leaf.id} isActive={isActive} canvasMode={leaf.view.canvasMode} view={leaf.view} />
       </GraphInteractionProvider>
     </LeafGraphConfigProvider>
   );
