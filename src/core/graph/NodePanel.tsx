@@ -427,7 +427,7 @@ export const NodePanel = ({
   const [content, setContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
+  const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [layoutMode, setLayoutMode] = useState<"wide" | "narrow">("wide");
@@ -574,26 +574,26 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
 
   // Buat array breadcrumb dari root hingga node saat ini
   const breadcrumbNodes = useMemo(() => {
-  if (!node) return [];
+    if (!node) return [];
 
-  const nodes = useNodeStore.getState().nodes;
-  const byId = new Map(nodes.map((item) => [item.id, item]));
-  const path: Node[] = [];
-  const visited = new Set<string>();
+    const nodes = useNodeStore.getState().nodes;
+    const byId = new Map(nodes.map((item) => [item.id, item]));
+    const path: Node[] = [];
+    const visited = new Set<string>();
 
-  let current: Node | undefined = node;
+    let current: Node | undefined = node;
 
-  while (current && !visited.has(current.id)) {
-    visited.add(current.id);
-    path.unshift(current);
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      path.unshift(current);
 
-    current = current.parentId
-      ? byId.get(current.parentId)
-      : undefined;
-  }
+      current = current.parentId
+        ? byId.get(current.parentId)
+        : undefined;
+    }
 
-  return path;
-}, [node]);
+    return path;
+  }, [node]);
 
   // Handler klik pada breadcrumb node
   const handleBreadcrumbClick = (targetNode: Node) => {
@@ -612,43 +612,49 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
   return (
     <div className="w-full h-full flex flex-col bg-background">
       {/* Header with full path */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40 bg-muted/10">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {getNodeIcon(node)}
-{/* Breadcrumb Path dengan Scroll tanpa Scrollbar */}
-<nav
-  aria-label="Breadcrumb"
-  className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5 text-xs font-mono text-muted-foreground scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
->
-  {breadcrumbNodes.map((item, index) => {
-    const isLast = index === breadcrumbNodes.length - 1;
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40 bg-muted/10 gap-3">
+        {/* Kontainer Path & Judul dengan Smooth Light Shadow di Tepi Kanan */}
+        <div className="relative flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+          <div className="shrink-0">{getNodeIcon(node)}</div>
 
-    return (
-      <span
-        key={item.id}
-        className="inline-flex shrink-0 items-center gap-1"
-      >
-        <button
-          type="button"
-          onClick={() => onBreadcrumbClick?.(item)}
-          className={cn(
-            "rounded px-1 py-0.5 transition-colors",
-            isLast
-              ? "font-medium text-foreground hover:bg-accent/40"
-              : "text-muted-foreground hover:bg-accent/40 hover:text-foreground hover:underline",
-          )}
-        >
-          {item.name}
-        </button>
+          {/* Breadcrumb Path dengan Gradien Pudar Halus */}
+          <div className="relative min-w-0 flex-1 overflow-hidden">
+            <nav
+              aria-label="Breadcrumb"
+              className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5 pr-8 text-xs font-mono text-muted-foreground scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {breadcrumbNodes.map((item, index) => {
+                const isLast = index === breadcrumbNodes.length - 1;
 
-        {!isLast && (
-          <span className="select-none text-muted-foreground/40">/</span>
-        )}
-      </span>
-    );
-  })}
-</nav>
+                return (
+                  <span
+                    key={item.id}
+                    className="inline-flex shrink-0 items-center gap-1"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onBreadcrumbClick?.(item)}
+                      className={cn(
+                        "rounded px-1 py-0.5 transition-colors",
+                        isLast
+                          ? "font-medium text-foreground hover:bg-accent/40"
+                          : "text-muted-foreground hover:bg-accent/40 hover:text-foreground hover:underline",
+                      )}
+                    >
+                      {item.name}
+                    </button>
 
+                    {!isLast && (
+                      <span className="select-none text-muted-foreground/40">/</span>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+
+            {/* OVERFLOW SHADOW: Gradien pudar lembut di tepi kanan agar tidak menabrak tombol aksi */}
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background via-background/80 to-transparent" />
+          </div>
 
           {hasChanges && (
             <span className="text-xs text-amber-500/80 shrink-0">
@@ -662,12 +668,13 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Action Buttons Group (Tanpa Tombol 'X' Close) */}
+        <div className="flex items-center gap-1 shrink-0 pl-1">
           {/* Layout toggle */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={() =>
               setLayoutMode(layoutMode === "wide" ? "narrow" : "wide")
             }
@@ -684,32 +691,31 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
             )}
           </Button>
 
-{node.type === "file" && (
-  <Button
-    variant="ghost"
-    size="icon"
-    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-    onClick={() =>
-      setEditorMode((prev) => (prev === "editor" ? "reading" : "editor"))
-    }
-    title={
-      editorMode === "editor"
-        ? "Beralih ke mode membaca (Reading)"
-        : "Beralih ke mode mengedit (Editor)"
-    }
-  >
-    {editorMode === "editor" ? (
-      <BookOpen className="w-3.5 h-3.5" />
-    ) : (
-      <PenLine className="w-3.5 h-3.5" />
-    )}
-  </Button>
-)}
-
+          {node.type === "file" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              onClick={() =>
+                setEditorMode((prev) => (prev === "editor" ? "reading" : "editor"))
+              }
+              title={
+                editorMode === "editor"
+                  ? "Beralih ke mode membaca (Reading)"
+                  : "Beralih ke mode mengedit (Editor)"
+              }
+            >
+              {editorMode === "editor" ? (
+                <BookOpen className="w-3.5 h-3.5" />
+              ) : (
+                <PenLine className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -737,15 +743,6 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onClose}
-          >
-            <X className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
@@ -777,21 +774,21 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
             </div>
           )}
 
-{/* Content Editor */}
-{node.type === "file" && (
-  <div className="min-h-[50vh]">
-    <MarkdownView
-      value={content}
-      onChange={setContent}
-      showProperties
-      mode={editorMode === "reading" ? "reading" : "live"}
-      placeholder="Write '/' or start writing..."
-      onWikilinkClick={onWikilinkClick}
-      onTagClick={onTagClick}
-      onSave={() => handleSave(false)}
-    />
-  </div>
-)}
+          {/* Content Editor */}
+          {node.type === "file" && (
+            <div className="min-h-[50vh]">
+              <MarkdownView
+                value={content}
+                onChange={setContent}
+                showProperties
+                mode={editorMode === "reading" ? "reading" : "live"}
+                placeholder="Write '/' or start writing..."
+                onWikilinkClick={onWikilinkClick}
+                onTagClick={onTagClick}
+                onSave={() => handleSave(false)}
+              />
+            </div>
+          )}
 
 
           {/* Folder Description */}
@@ -818,7 +815,7 @@ const [editorMode, setEditorMode] = useState<"editor" | "reading">("editor");
           {(node.type === "file" || node.type === "media") && (
             <BacklinksSection
               backlinks={backlinks}
-              onBacklinkClick={onBacklinkClick || (() => {})}
+              onBacklinkClick={onBacklinkClick || (() => { })}
             />
           )}
         </div>

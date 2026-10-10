@@ -119,22 +119,6 @@ export function drawNode(
   const y = node.y ?? 0;
   const alpha = state.dimmed ? 0.18 : theme.nodeOpacity;
 
-  // Below the threshold only a marker is drawn.
-  if (!state.preserveDetail && zoom < state.labelThreshold * 0.6) {
-    if (state.config.glow && !state.dimmed) {
-      drawGlow(ctx, x, y, 5, accent, state.config.glowIntensity, state.glowPhase ?? 0, state.selected || state.hovered ? 1.3 : 1);
-    }
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = accent;
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    node.toggle = null;
-    return;
-  }
-
   // Keep the configured node appearance at a stable screen size. Canvas
   // coordinates are normally scaled by the camera, so counter-scale around
   // the node while leaving its graph position unchanged.
@@ -331,7 +315,8 @@ export function drawNode(
   }
 
 
-  if (state.showLabels && (state.preserveDetail || zoom >= state.labelThreshold * 0.6)) {
+  // Selalu tampilkan label teks jika diaktifkan, tidak disembunyikan oleh zoom threshold
+  if (state.showLabels) {
     const italic = state.config.labelFontStyle.includes('italic') ? 'italic ' : '';
     const weight = state.config.labelFontStyle.includes('bold') || state.isRoot ? '600' : '500';
     ctx.font = `${italic}${cardFont(fontSize, weight)}`;

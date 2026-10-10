@@ -633,46 +633,6 @@ export function GraphWorkspaceControls({
                     </div>
                   </div>
 
-                  {/* TAMBAHKAN: Switcher Layout Arrangement (Auto vs Custom) */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[11px] text-muted-foreground">Layout Structure</Label>
-                      <span className="text-[10px] text-muted-foreground/70">
-                        {layoutArrangement === 'auto' ? 'Fixed (Anti-overlap)' : 'Freehand Custom'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-border/60 bg-muted/30 p-1">
-                      <Button
-                        type="button"
-                        variant={layoutArrangement === 'auto' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className={cn(
-                          "h-7 gap-1.5 text-xs font-medium transition-all",
-                          layoutArrangement === 'auto' && "bg-background text-foreground shadow-sm"
-                        )}
-                        onClick={() => setLayoutArrangement('auto')}
-                        title="Automated layout: fixed coordinates, prevents overlapping, auto snap-back"
-                      >
-                        <Sparkles className="h-3.5 w-3.5 text-primary" />
-                        Auto
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={layoutArrangement === 'custom' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className={cn(
-                          "h-7 gap-1.5 text-xs font-medium transition-all",
-                          layoutArrangement === 'custom' && "bg-background text-foreground shadow-sm"
-                        )}
-                        onClick={() => setLayoutArrangement('custom')}
-                        title="Custom layout: free dragging and manual node coordinate placement"
-                      >
-                        <Move className="h-3.5 w-3.5 text-primary" />
-                        Custom
-                      </Button>
-                    </div>
-                  </div>
-
                   {/* Dynamic Layout Algorithm Options */}
                   <div className="space-y-1.5">
                     <Label className="text-[11px] text-muted-foreground">
@@ -717,27 +677,57 @@ export function GraphWorkspaceControls({
                     </div>
                   )}
 
-                  {/* Opsi Umum: Zoom-Out Rendering */}
+                                    {/* Layout Structure: Fixed (Anti-overlap) Auto vs Custom (Tepat di atas Zoom-Out) */}
                   <div className="space-y-1.5 border-t border-border/60 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[11px] text-muted-foreground">Layout Structure</Label>
+                      <span className="text-[10px] text-muted-foreground/70">
+                        {layoutArrangement === 'auto' ? 'Fixed (Anti-overlap)' : 'Freehand Custom'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button
+                        type="button"
+                        variant={layoutArrangement === 'auto' ? 'secondary' : 'outline'}
+                        className="h-7 text-xs font-medium"
+                        onClick={() => setLayoutArrangement('auto')}
+                        title="Automated layout: fixed coordinates, prevents overlapping, auto snap-back"
+                      >
+                        Auto
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={layoutArrangement === 'custom' ? 'secondary' : 'outline'}
+                        className="h-7 text-xs font-medium"
+                        onClick={() => setLayoutArrangement('custom')}
+                        title="Custom layout: free dragging and manual node coordinate placement"
+                      >
+                        Custom
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Zoom-Out Rendering: 2 Tombol Minimalist Modern (Sesuai gaya Orientation) */}
+                  <div className="space-y-1.5">
                     <Label className="text-[11px] text-muted-foreground">Zoom-Out Rendering</Label>
-                    <Select
-                      value={zoomOutRendering}
-                      onValueChange={(val) =>
-                        patchEngine({ zoomOutRendering: val as 'optimized' | 'full-detail' })
-                      }
-                    >
-                      <SelectTrigger className="h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="optimized" className="text-xs">
-                          Optimized
-                        </SelectItem>
-                        <SelectItem value="full-detail" className="text-xs">
-                          Keep full detail
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button
+                        type="button"
+                        variant={zoomOutRendering === 'optimized' ? 'secondary' : 'outline'}
+                        className="h-7 text-xs font-medium"
+                        onClick={() => patchEngine({ zoomOutRendering: 'optimized' })}
+                      >
+                        Optimized
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={zoomOutRendering === 'full-detail' ? 'secondary' : 'outline'}
+                        className="h-7 text-xs font-medium"
+                        onClick={() => patchEngine({ zoomOutRendering: 'full-detail' })}
+                      >
+                        Full Detail
+                      </Button>
+                    </div>
                     <p className="text-[10px] leading-snug text-muted-foreground">
                       Keep full detail preserves node cards, labels, and link weight while zooming out.
                     </p>

@@ -73,9 +73,10 @@ export function WorkspaceGroup({
       onMouseDown={() => !isActive && setActiveGroup(group.id)}
     >
       {/* Tab strip */}
-      <div className="h-8 flex items-stretch border-b border-border bg-muted/30 overflow-x-auto no-scrollbar">
+      {/* Tab strip - Fixed Header Container */}
+      <div className="h-8 flex items-stretch border-b border-border bg-muted/30 shrink-0 select-none">
 
-        {/* Tombol Sidebar Toggle di pojok paling kiri Window Tabs */}
+        {/* 1. Fixed Left: Sidebar Toggle Button (Hanya muncul di mobile, tersembunyi di tablet & laptop/desktop) */}
         <Button
           type="button"
           variant="ghost"
@@ -84,81 +85,84 @@ export function WorkspaceGroup({
             const current = useUIStore.getState().activeTool;
             useUIStore.getState().setActiveTool(current ? null : "files");
           }}
-          className={cn(
-            "h-8 w-8 rounded-none border-r border-border shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50",
-            // Di desktop bisa tetap tampil sebagai toggle explorer praktis, atau tambahkan 'md:hidden' jika hanya ingin tampil di mobile/tablet
-          )}
+          className="h-8 w-8 rounded-none border-r border-border shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50 md:hidden"
           title="Toggle Sidebar (Files)"
           aria-label="Toggle Sidebar"
         >
           <PanelLeft className="w-3.5 h-3.5" />
         </Button>
 
-        {group.leaves.map((leaf, index) => (
+        {/* 2. Scrollable Middle: Khusus deretan Tabs Window saja yang bisa discroll */}
+        <div className="flex-1 flex items-stretch min-w-0 overflow-x-auto no-scrollbar">
+          {group.leaves.map((leaf, index) => (
+            <div
+              key={leaf.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(DRAG_KEY, leaf.id);
+                e.dataTransfer.setData("text/plain", leaf.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropIndex(index);
+              }}
+              onDragLeave={() => setDropIndex((i) => (i === index ? null : i))}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = readLeafId(e);
+                setDropIndex(null);
+                if (id) moveLeaf(id, group.id, index);
+              }}
+              onClick={() => setActiveLeaf(group.id, leaf.id)}
+              onDoubleClick={() => togglePin(leaf.id)}
+              className={cn(
+                "group relative flex items-center gap-2 px-3 text-xs cursor-pointer select-none whitespace-nowrap border-r border-border shrink-0 transition-colors",
+                leaf.id === activeLeaf?.id
+                  ? "bg-background text-foreground shadow-xs font-medium"
+                  : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+                dropIndex === index && "border-l-2 border-l-primary",
+              )}
+              title={leaf.view.title}
+            >
+              {leaf.pinned && <Pin className="w-3 h-3 shrink-0" />}
+              <span className="max-w-[12rem] truncate">{leaf.view.title}</span>
+              {!leaf.pinned && (
+                <button
+                  aria-label={`Close ${leaf.view.title}`}
+                  className="opacity-0 group-hover:opacity-100 hover:text-foreground p-0.5 rounded transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeLeaf(leaf.id);
+                  }}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {/* Spacer untuk drop target di ujung deretan tabs */}
           <div
-            key={leaf.id}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData(DRAG_KEY, leaf.id);
-              e.dataTransfer.setData("text/plain", leaf.id);
-              e.dataTransfer.effectAllowed = "move";
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDropIndex(index);
-            }}
-            onDragLeave={() => setDropIndex((i) => (i === index ? null : i))}
+            className="flex-1 min-w-8"
+            onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              e.stopPropagation();
               const id = readLeafId(e);
-              setDropIndex(null);
-              if (id) moveLeaf(id, group.id, index);
+              if (id) moveLeaf(id, group.id);
             }}
-            onClick={() => setActiveLeaf(group.id, leaf.id)}
-            onDoubleClick={() => togglePin(leaf.id)}
-            className={cn(
-              "group relative flex items-center gap-2 px-3 text-xs cursor-pointer select-none whitespace-nowrap border-r border-border",
-              leaf.id === activeLeaf?.id
-                ? "bg-background text-foreground"
-                : "text-muted-foreground hover:bg-accent/50",
-              dropIndex === index && "border-l-2 border-l-primary",
-            )}
-            title={leaf.view.title}
-          >
-            {leaf.pinned && <Pin className="w-3 h-3 shrink-0" />}
-            <span className="max-w-[12rem] truncate">{leaf.view.title}</span>
-            {!leaf.pinned && (
-              <button
-                aria-label={`Close ${leaf.view.title}`}
-                className="opacity-0 group-hover:opacity-100 hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeLeaf(leaf.id);
-                }}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        ))}
+          />
+        </div>
 
-        <div
-          className="flex-1 min-w-8"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            const id = readLeafId(e);
-            if (id) moveLeaf(id, group.id);
-          }}
-        />
-
-        <div className="flex items-center gap-0.5 px-1 shrink-0">
+        {/* 3. Fixed Right: Add Tab & Split Tabs Buttons */}
+        <div className="flex items-center gap-0.5 px-1 shrink-0 border-l border-border bg-muted/30">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             aria-label="New tab"
+            title="New tab"
             onClick={() => {
               setActiveGroup(group.id);
               openView({ type: "empty", title: "New tab" });
@@ -169,8 +173,9 @@ export function WorkspaceGroup({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             aria-label="Split right"
+            title="Split right"
             onClick={() => splitGroup(group.id, "horizontal")}
           >
             <SplitSquareHorizontal className="w-3.5 h-3.5" />
@@ -178,8 +183,9 @@ export function WorkspaceGroup({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             aria-label="Split down"
+            title="Split down"
             onClick={() => splitGroup(group.id, "vertical")}
           >
             <SplitSquareVertical className="w-3.5 h-3.5" />

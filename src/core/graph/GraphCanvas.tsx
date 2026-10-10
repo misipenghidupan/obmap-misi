@@ -242,7 +242,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
   const customPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-    useEffect(() => {
+  useEffect(() => {
     customPositions.current.clear();
   }, [layoutMode]);
 
@@ -381,7 +381,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     [collapsedIds, projection, geometry.targets, data.nodes, layoutMode, toggleCollapsed, setTransitionStatus]
   );
 
-    // Helper: Transisi animasi halus saat Hapus Node (Delete)
+  // Helper: Transisi animasi halus saat Hapus Node (Delete)
   const handleSmoothDelete = useCallback(
     (nodeId: string, executeDelete: () => void) => {
       const node = nodeCache.current.get(nodeId);
@@ -907,7 +907,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         delete node.fx;
         delete node.fy;
         customPositions.current.delete(node.id);
-        
+
         onNodeMove?.(node.id, hoveredTargetId);
       } else {
         // KASUS 2: DROP DI RUANG KOSONG
@@ -985,6 +985,42 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     [data.nodes, selectedNode?.id]
   );
 
+  // Batasi zoom out maksimal hingga 250% (2.5x) dari total visual bounding box node & links
+  const minZoomLimit = useMemo(() => {
+    if (!data.nodes || data.nodes.length === 0 || size.width === 0 || size.height === 0) {
+      return 0.1;
+    }
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    for (const node of data.nodes) {
+      const nx = node.x ?? 0;
+      const ny = node.y ?? 0;
+      if (nx < minX) minX = nx;
+      if (nx > maxX) maxX = nx;
+      if (ny < minY) minY = ny;
+      if (ny > maxY) maxY = ny;
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return 0.1;
+
+    // Lebar dan tinggi visual konten grafik (+ padding visual)
+    const contentWidth = Math.max(120, maxX - minX + 160);
+    const contentHeight = Math.max(120, maxY - minY + 160);
+
+    // Skala ketika grafik pas 100% di layar (fit to view)
+    const fitScale = Math.min(size.width / contentWidth, size.height / contentHeight);
+
+    // Batasi zoom-out hingga 250% (0.4x dari ukuran fit) untuk optimasi performa dan orientasi user
+    const calculatedMinZoom = fitScale / 2.5;
+
+    // Pastikan nilai berada di rentang yang aman (tidak 0 atau negatif)
+    return Math.max(0.05, Math.min(calculatedMinZoom, 1.0));
+  }, [data.nodes, size.width, size.height]);
+
   return (
     <div
       ref={containerRef}
@@ -998,6 +1034,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
         height={size.height}
         backgroundColor={theme.card}
         autoPauseRedraw={!particlesActive && !glowAnimated && !cosmicActive}
+        minZoom={minZoomLimit}
+        maxZoom={8}
         nodeRelSize={graphConfig.nodes.relSize}
         nodeCanvasObject={paintNode}
         nodePointerAreaPaint={paintPointer}
@@ -1032,17 +1070,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       />
 
       <GraphBottomOverlays
-            depths={visibleDepths}
-            hierarchy={graphConfig.hierarchy}
-            nodes={data.nodes}
-            links={data.links}
-            graphRef={graphRef}
-            viewportWidth={size.width}
-            viewportHeight={size.height}
-            folderColor={theme.folder}
-            fileColor={theme.file}
-            linkColor={theme.link}
-            selectedNodeId={selectedNode?.id ?? null}
+        depths={visibleDepths}
+        hierarchy={graphConfig.hierarchy}
+        nodes={data.nodes}
+        links={data.links}
+        graphRef={graphRef}
+        viewportWidth={size.width}
+        viewportHeight={size.height}
+        folderColor={theme.folder}
+        fileColor={theme.file}
+        linkColor={theme.link}
+        selectedNodeId={selectedNode?.id ?? null}
       />
 
       {/* Tampilkan Toolbar saat isToolbarVisible aktif (baik di mode Mindmap maupun Graph) */}

@@ -7,6 +7,7 @@ import { Label } from "@/shared/ui/label";
 import { Input } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
 import { Slider } from "@/shared/ui/slider-number";
+import { Button } from "@/shared/ui/button";
 import {
   Select,
   SelectContent,
@@ -94,24 +95,55 @@ export function LayoutEngineTab() {
           />
         </div>
 
+        {/* Layout Structure: Auto vs Custom (Tepat di atas Zoom-Out) */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Layout Structure</Label>
+            <span className="text-[10px] text-muted-foreground">
+              {interaction.layoutArrangement === 'auto' ? 'Fixed (Anti-overlap)' : 'Freehand Custom'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button
+              type="button"
+              variant={interaction.layoutArrangement === 'auto' ? 'secondary' : 'outline'}
+              className="h-8 text-xs font-medium"
+              onClick={() => interaction.setLayoutArrangement('auto')}
+            >
+              Auto
+            </Button>
+            <Button
+              type="button"
+              variant={interaction.layoutArrangement === 'custom' ? 'secondary' : 'outline'}
+              className="h-8 text-xs font-medium"
+              onClick={() => interaction.setLayoutArrangement('custom')}
+            >
+              Custom
+            </Button>
+          </div>
+        </div>
+
+        {/* Zoom-out rendering: 2 Tombol Minimalist Modern */}
         <div className="space-y-1.5">
           <Label className="text-xs">Zoom-out rendering</Label>
-          <Select
-            value={engine.zoomOutRendering}
-            onValueChange={(value) =>
-              engine.patch({
-                zoomOutRendering: value as "optimized" | "full-detail",
-              })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="optimized">Optimized</SelectItem>
-              <SelectItem value="full-detail">Keep full detail</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button
+              type="button"
+              variant={engine.zoomOutRendering === 'optimized' ? 'secondary' : 'outline'}
+              className="h-8 text-xs font-medium"
+              onClick={() => engine.patch({ zoomOutRendering: 'optimized' })}
+            >
+              Optimized
+            </Button>
+            <Button
+              type="button"
+              variant={engine.zoomOutRendering === 'full-detail' ? 'secondary' : 'outline'}
+              className="h-8 text-xs font-medium"
+              onClick={() => engine.patch({ zoomOutRendering: 'full-detail' })}
+            >
+              Full Detail
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             Keep full detail preserves node cards, labels, and link weight while zooming out.
           </p>
