@@ -34,12 +34,12 @@ export function GraphBottomOverlays({
 
   return (
     <Popover open={active !== null} onOpenChange={(open) => !open && setActive(null)}>
-      {/* Seluruh dock buttons menjadi Anchor Popover */}
+      {/* 1. LEVEL & MINIMAP DOCK BUTTONS: POSISI ATAS KIRI */}
       <PopoverAnchor asChild>
         <div
           role="group"
           aria-label="Graph overview controls"
-          className="pointer-events-auto absolute bottom-3 right-3 z-30 inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-card/90 p-0.5 shadow-md shadow-black/25 backdrop-blur-md"
+          className="pointer-events-auto absolute left-2 top-2 z-30 inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-card/90 p-0.5 shadow-md shadow-black/25 backdrop-blur-md sm:left-4 sm:top-4"
         >
           <TooltipProvider delayDuration={300}>
             {showLevels && (
@@ -60,7 +60,7 @@ export function GraphBottomOverlays({
                   </Button>
                 </TooltipTrigger>
                 {active !== 'levels' && (
-                  <TooltipContent side="top" className="text-xs">Hierarchy levels</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">Hierarchy levels</TooltipContent>
                 )}
               </Tooltip>
             )}
@@ -82,18 +82,18 @@ export function GraphBottomOverlays({
                 </Button>
               </TooltipTrigger>
               {active !== 'minimap' && (
-                <TooltipContent side="top" className="text-xs">Mini-map</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">Mini-map</TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>
         </div>
       </PopoverAnchor>
 
-      {/* PopoverContent tunggal yang selalu sejajar rata kanan dengan ujung toolbar dock */}
+      {/* PopoverContent membuka ke bawah rata kiri */}
       {active && (
         <PopoverContent
-          side="top"
-          align="end"
+          side="bottom"
+          align="start"
           sideOffset={8}
           collisionPadding={12}
           aria-label={label}
