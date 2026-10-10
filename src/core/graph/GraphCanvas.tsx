@@ -265,18 +265,35 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
   const data = useMemo(() => {
     const visible = new Set(visibleIds);
     const nodes = projection.nodes.filter((node) => visible.has(node.id));
-    // Seed newly visible nodes at their deterministic target before ForceGraph
-    // sees them. This avoids one-frame links to its temporary simulation
-    // coordinates during data refresh, collapse and expand.
+    // Inisialisasi posisi awal (seeding) untuk Add & Expand:
+    // Node baru/anak yang baru terbuka TIDAK langsung dipasang di target.x,
+    // melainkan mulai dari posisi INDUKNYA (parentNode) agar mengalir keluar dengan halus!
     for (const node of nodes) {
       const target = geometry.targets.get(node.id);
       if (!target) continue;
+
       if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) {
-        node.x = target.x;
-        node.y = target.y;
+        const parentId = projection.parentByChild.get(node.id);
+        const parentNode = parentId ? nodeCache.current.get(parentId) : null;
+
+        // Jika punya induk, mulai dari posisi induk. Jika root, mulai dari tengah layar (0,0)
+        const seedX = Number.isFinite(parentNode?.x)
+          ? parentNode!.x!
+          : Number.isFinite(parentNode?.fx)
+            ? parentNode!.fx!
+            : 0;
+
+        const seedY = Number.isFinite(parentNode?.y)
+          ? parentNode!.y!
+          : Number.isFinite(parentNode?.fy)
+            ? parentNode!.fy!
+            : 0;
+
+        node.x = seedX;
+        node.y = seedY;
         if (layoutMode !== 'free-force') {
-          node.fx = target.x;
-          node.fy = target.y;
+          node.fx = seedX;
+          node.fy = seedY;
         }
       }
     }
@@ -301,11 +318,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     const controller = transition.current;
     if (layoutMode === 'free-force') {
       controller.release(data.nodes);
-      // Reheat simulasi fisika secara halus dengan alpha target
-      const fg = graphRef.current;
-      if (fg?.d3ReheatSimulation) {
-        fg.d3ReheatSimulation();
-      }
+      // Reheat simulasi fisika secara aman dan resmi sesuai tipe ForceGraphMethods
+      graphRef.current?.d3ReheatSimulation?.();
       setTransitionStatus('idle');
       return;
     }
@@ -340,13 +354,14 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
       // Cari semua anak dan keturunan yang akan dilipat
       const descendants = subtreeOf(projection, nodeId);
-      descendants.delete(nodeId); // Simpan induknya tetap di tempat
+      descendants.delete(nodeId);
 
-      if (descendants.size === 0 || layoutMode === 'free-force') {
+      if (descendants.size === 0) {
         toggleCollapsed(nodeId);
         return;
       }
 
+      // Berlaku untuk SEMUA mode layout: luncurkan anak-anak masuk ke posisi induk
       const collapseTargets = new Map(geometry.targets);
       for (const childId of descendants) {
         collapseTargets.set(childId, { x: targetX, y: targetY });
@@ -354,7 +369,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
       setTransitionStatus('animating');
       transition.current.run(data.nodes, collapseTargets, {
-        duration: 320,
+        duration: 280,
         reducedMotion: prefersReducedMotion(),
         onTick: () => graphRef.current?.refresh?.(),
         onDone: () => {
@@ -364,6 +379,41 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       });
     },
     [collapsedIds, projection, geometry.targets, data.nodes, layoutMode, toggleCollapsed, setTransitionStatus]
+  );
+
+    // Helper: Transisi animasi halus saat Hapus Node (Delete)
+  const handleSmoothDelete = useCallback(
+    (nodeId: string, executeDelete: () => void) => {
+      const node = nodeCache.current.get(nodeId);
+      if (!node) {
+        executeDelete();
+        return;
+      }
+
+      const parentId = projection.parentByChild.get(nodeId);
+      const parent = parentId ? nodeCache.current.get(parentId) : null;
+      const targetX = parent?.x ?? parent?.fx ?? node.x ?? 0;
+      const targetY = parent?.y ?? parent?.fy ?? node.y ?? 0;
+
+      const descendants = subtreeOf(projection, nodeId); // termasuk node itu sendiri
+
+      const deleteTargets = new Map(geometry.targets);
+      for (const id of descendants) {
+        deleteTargets.set(id, { x: targetX, y: targetY });
+      }
+
+      setTransitionStatus('animating');
+      transition.current.run(data.nodes, deleteTargets, {
+        duration: 240,
+        reducedMotion: prefersReducedMotion(),
+        onTick: () => graphRef.current?.refresh?.(),
+        onDone: () => {
+          setTransitionStatus('idle');
+          executeDelete();
+        },
+      });
+    },
+    [projection, geometry.targets, data.nodes, setTransitionStatus]
   );
 
   useEffect(() => () => transition.current.cancel(), []);
@@ -852,34 +902,33 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
       // KASUS 1: REPARENTING VALID DIJALANKAN (BERFUNGSI DI GRAPH & MINDMAP)
       if (isValidDrop && hoveredTargetId) {
-        onNodeMove?.(node.id, hoveredTargetId);
-        customPositions.current.delete(node.id);
+        // Jangan hapus paksa posisi x & y agar transition controller bisa mengambil
+        // koordinat mouse sebagai titik awal (fromX, fromY) menuju posisi slot pohon baru (toX, toY)
         delete node.fx;
         delete node.fy;
+        customPositions.current.delete(node.id);
+        
+        onNodeMove?.(node.id, hoveredTargetId);
       } else {
         // KASUS 2: DROP DI RUANG KOSONG
         if (layoutArrangement === 'auto') {
-          // MODE AUTO: Snap-back ke kalkulasi algoritma (anti-overlap)
           customPositions.current.delete(node.id);
+          delete node.fx;
+          delete node.fy;
 
-          if (layoutMode === 'free-force') {
-            // Pada free-force auto, bebaskan pin dan biarkan fisika mengalir
-            delete node.fx;
-            delete node.fy;
+          // Jalankan transisi kembali ke target layout secara mulus
+          const target = geometry.targets.get(node.id);
+          if (target && layoutMode !== 'free-force') {
+            const singleTarget = new Map(geometry.targets);
+            transition.current.run(data.nodes, singleTarget, {
+              duration: 350,
+              reducedMotion: prefersReducedMotion(),
+              onTick: () => graphRef.current?.refresh?.(),
+            });
+          } else if (layoutMode === 'free-force') {
             graphRef.current?.d3ReheatSimulation?.();
-          } else {
-            // Pada algoritma deterministik, kembalikan ke target koordinat algoritma
-            const target = geometry.targets.get(node.id);
-            const returnX = target?.x ?? draggedNodeOriginalPos?.x ?? node.x ?? 0;
-            const returnY = target?.y ?? draggedNodeOriginalPos?.y ?? node.y ?? 0;
-
-            node.x = returnX;
-            node.y = returnY;
-            node.fx = returnX;
-            node.fy = returnY;
           }
         } else {
-          // MODE CUSTOM: Kunci posisi baru node di tempat user melepaskannya
           node.fx = node.x;
           node.fy = node.y;
           if (node.x !== undefined && node.y !== undefined) {

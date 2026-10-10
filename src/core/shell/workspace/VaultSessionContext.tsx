@@ -50,6 +50,7 @@ import {
   type Node,
 } from "@/shared/stores";
 import { useWorkspaceStore } from "./store/useWorkspaceStore";
+import { useStatusNoticeStore } from "@/shared/stores/useStatusNoticeStore";
 
 interface VaultSessionValue {
   nodes: Node[];
@@ -392,9 +393,15 @@ export function VaultSessionProvider({ children }: { children: ReactNode }) {
         await moveNodeOnDisk(renameVault, nodes, renamed, updatedNode.id);
         await commitNodes(renamed);
         if (updatedFiles.length > 0) {
-          toast.success(
-            `Updated links in ${updatedFiles.length} note${updatedFiles.length > 1 ? "s" : ""}`,
-          );
+          useStatusNoticeStore
+            .getState()
+            .setNotice(
+              `Renamed to "${updatedNode.name}" · updated ${updatedFiles.length} note link${updatedFiles.length > 1 ? "s" : ""}`,
+            );
+        } else {
+          useStatusNoticeStore
+            .getState()
+            .setNotice(`Renamed to "${updatedNode.name}"`);
         }
         return;
       }
@@ -525,9 +532,7 @@ export function VaultSessionProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      toast.success(
-        `Moved "${node.name}" to ${newParent ? newParent.name : "root"}`,
-      );
+useStatusNoticeStore.getState().setNotice(`Moved "${node.name}" to ${newParent ? newParent.name : "root"}`);
     },
     [
       nodes,
@@ -583,7 +588,7 @@ export function VaultSessionProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      toast.success(`${type === "folder" ? "Folder" : "File"} created!`);
+useStatusNoticeStore.getState().setNotice(`${type === "folder" ? "Folder" : "File"} "${newNode.name}" created`);
     },
     [
       selectedNode,
