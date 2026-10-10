@@ -145,7 +145,6 @@ export function drawNode(
   ctx.translate(-x, -y)
 
   if (state.isDragged) {
-    ctx.scale(1.05, 1.05);
     ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
     ctx.shadowBlur = 12;
     ctx.shadowOffsetX = 0;
@@ -173,22 +172,39 @@ export function drawNode(
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  if (state.selected || state.hovered) {
-    ctx.shadowBlur = 14;
-    ctx.shadowColor = dim(accent, 0.75);
+  // ============= NODE DEPTH & ELEVATION (SOFT GLOW & GLASSMORPHISM) =============
+  const isElevated = state.selected || state.hovered;
+
+  if (isElevated) {
+    // Multi-layer ambient drop shadow (Physical depth)
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 22;
   }
 
   if (boxed) {
     roundedRect(ctx, x - w / 2, y - h / 2, w, h, 8);
+    
+    // Background fill stabil
     ctx.fillStyle = state.config.labelBackground
-      ? dim(theme.labelBackground, Math.max(0.72, state.config.opacity))
-      : dim(accent, state.selected ? 0.32 : 0.16);
+      ? dim(theme.labelBackground, state.selected ? 0.95 : Math.max(0.72, state.config.opacity))
+      : dim(accent, state.selected ? 0.35 : state.hovered ? 0.25 : 0.16);
     ctx.fill();
+
+    // Reset shadow blur
     ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Outer border stroke: pertegas saat dipilih/di-hover tanpa mengubah ketebalan geometri
     ctx.lineWidth = state.selected ? 2 : 1;
-    ctx.strokeStyle = state.selected ? accent : dim(accent, 0.6);
+    ctx.strokeStyle = state.selected 
+      ? accent 
+      : state.hovered 
+        ? dim(accent, 0.85) 
+        : dim(accent, 0.5);
     ctx.stroke();
   }
+
 
   // Configurable node marker.
   const markerX = boxed ? x - w / 2 + 9 : x;
@@ -346,41 +362,6 @@ export function drawNode(
   }
 
   ctx.restore();
-
-  // Collapse toggle on the outward edge of branch nodes.
-  if (node.childCount > 0) {
-    const r = 6;
-    const tx = x + (boxed ? w / 2 : markerRadius) + r + 2;
-    const ty = y;
-    ctx.save();
-    ctx.globalAlpha = state.dimmed ? 0.25 : 1;
-    ctx.beginPath();
-    ctx.arc(tx, ty, r, 0, Math.PI * 2);
-    ctx.fillStyle = theme.card;
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = dim(accent, 0.8);
-    ctx.stroke();
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(tx - 3, ty);
-    ctx.lineTo(tx + 3, ty);
-    if (state.collapsed) {
-      ctx.moveTo(tx, ty - 3);
-      ctx.lineTo(tx, ty + 3);
-    }
-    ctx.stroke();
-    ctx.restore();
-    node.toggle = {
-      x: x + (tx - x) * detailScale,
-      y: y + (ty - y) * detailScale,
-      r: (r + 3) * detailScale,
-    };
-  } else {
-    node.toggle = null;
-  }
-  ctx.restore();
 }
 
 
@@ -404,7 +385,7 @@ export function paintNodePointerArea(
   });
   const x = node.x ?? 0;
   const y = node.y ?? 0;
-  const extra = node.childCount > 0 ? 18 : 0;
+  const extra = node.childCount > 0 ? 32 : 0;
   const boxed = config ? config.labelBox : true;
   const markerRadius = Math.max(3, config?.relSize ?? 6);
   const width = boxed ? layout.width : markerRadius * 2;

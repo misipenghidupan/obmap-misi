@@ -18,6 +18,7 @@ import {
   Globe,
   Link2,
   Network,
+  Move,
   Pause,
   Play,
   Plus,
@@ -31,6 +32,7 @@ import {
   UnfoldVertical,
   X,
   Zap,
+  Palette,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { CanvasMode, LayoutMode, MindmapOrientation } from './model/graphTypes';
@@ -62,8 +64,13 @@ import {
   HierarchyLinkColorControls,
 } from './config-panel/HierarchyColorControls';
 import { ChevronRight } from 'lucide-react';
+import { ColorEngineControls } from './config-panel/ColorEngineControls';
+import { AtmosphereControls } from './config-panel/AtmosphereControls';
+import { mergeAtmosphereConfig } from './model/atmosphereConfig';
+import { Tabs, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 
-type SettingGroup = 'search' | 'layout' | 'nodes' | 'links' | 'physics' | 'global';
+type SettingGroup = 'search' | 'layout' | 'colors' | 'atmosphere' | 'appearance' | 'global';
+
 type LabelMode = 'nodes' | 'labels' | 'boxes';
 type LinkStyleType = keyof TopologyConfig['styles'];
 
@@ -150,25 +157,15 @@ const NODE_SHAPES = [
   { value: 'hexagon', label: 'Hexagon' },
 ];
 
-const DAG_MODES = [
-  { value: 'null', label: 'None (Organic)' },
-  { value: 'td', label: 'Top-Down' },
-  { value: 'bu', label: 'Bottom-Up' },
-  { value: 'lr', label: 'Left-Right' },
-  { value: 'radialin', label: 'Radial In' },
-  { value: 'radialout', label: 'Radial Out' },
-];
-
 export type SmartZoomAction = 'fit' | 'selection' | 'reset';
 
 interface GraphWorkspaceControlsProps {
   layout: LayoutMode;
   canvasMode?: CanvasMode;
+  onCanvasModeChange?: (mode: CanvasMode) => void;
   onLayoutChange: (layout: LayoutMode) => void;
   orientation: MindmapOrientation;
   onOrientationChange: (orientation: MindmapOrientation) => void;
-  highlightPathway: boolean;
-  onHighlightPathwayChange: (value: boolean) => void;
   collapsedCount: number;
   onExpandAll: () => void;
   focused: boolean;
@@ -189,11 +186,10 @@ interface GraphWorkspaceControlsProps {
 export function GraphWorkspaceControls({
   layout,
   canvasMode = 'graph',
+  onCanvasModeChange,
   onLayoutChange,
   orientation,
   onOrientationChange,
-  highlightPathway,
-  onHighlightPathwayChange,
   collapsedCount,
   onExpandAll,
   focused,
@@ -210,12 +206,26 @@ export function GraphWorkspaceControls({
   onTagFilterChange,
   onSmartZoom,
 }: GraphWorkspaceControlsProps) {
+
+  // Handler untuk beralih canvas mode (mindmap vs graph)
+  const handleModeSwitch = (mode: CanvasMode) => {
+    if (onCanvasModeChange) {
+      onCanvasModeChange(mode);
+    } else {
+      setStoreCanvasMode(mode);
+    }
+  };
+
+  const layoutArrangement = useGraphInteractionStore((s) => s.layoutArrangement);
+  const setLayoutArrangement = useGraphInteractionStore((s) => s.setLayoutArrangement);
+
   // Kontrol gear: toggle menu icon button ke bawah
   const [isGearOpen, setIsGearOpen] = useState(true);
   const [activePanel, setActivePanel] = useState<SettingGroup | null>(null);
+  const [appearanceTab, setAppearanceTab] = useState<'nodes' | 'links'>('nodes');
   const leafApi = useLeafGraphConfigApi();
 
-    // Ambil config lokal jika ada di dalam tab, jika tidak gunakan global
+  // Ambil config lokal jika ada di dalam tab, jika tidak gunakan global
   const localConfig = useLeafGraphConfig((s) => s.config);
   const globalConfig = useGraphStore((s) => s.config);
   const config = localConfig ?? globalConfig;
@@ -235,7 +245,7 @@ export function GraphWorkspaceControls({
     : (upd: Partial<ForceConfig>) => useGraphStore.getState().updateForceConfig(upd);
   const updateTopologyConfig = leafApi
     ? (upd: Parameters<LeafGraphConfigState['setTopologyConfig']>[0]) =>
-        leafApi.getState().setTopologyConfig(upd)
+      leafApi.getState().setTopologyConfig(upd)
     : (upd: Partial<TopologyConfig>) => useGraphStore.getState().updateTopologyConfig(upd);
   const updateTopologyStyle = (type: LinkStyleType, upd: Partial<LinkStyle>) => {
     if (leafApi) {
@@ -274,10 +284,11 @@ export function GraphWorkspaceControls({
   const saveTemplate = useGraphTemplatesStore((s) => s.saveTemplate);
   const deleteTemplate = useGraphTemplatesStore((s) => s.deleteTemplate);
   const setDefaultTemplate = useGraphTemplatesStore((s) => s.setDefaultTemplate);
-  
+
   const stats = useGraphStore((s) => s.stats);
   const requestReheat = useGraphInteractionStore((s) => s.requestReheat);
   const requestStop = useGraphInteractionStore((s) => s.requestStop);
+  const setStoreCanvasMode = useGraphInteractionStore((s) => s.setCanvasMode);
 
   const filterCount =
     Number(minDepth > 0) +
@@ -302,7 +313,7 @@ export function GraphWorkspaceControls({
     else updateNodeConfig({ showLabels: true, labelBox: true });
   };
 
-    // Handler 1: Simpan setting saat ini sebagai template baru
+  // Handler 1: Simpan setting saat ini sebagai template baru
   const handleSaveTemplate = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = templateName.trim();
@@ -362,234 +373,174 @@ export function GraphWorkspaceControls({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="pointer-events-none absolute right-2 top-2 z-40 flex flex-row-reverse items-start gap-2.5 sm:right-4 sm:top-4">
-        {/* Kolom Tombol Floating Toolbar */}
-        <div className="flex w-11 flex-col items-center gap-2">
-          {/* Main Gear Button */}
-          <div className="pointer-events-auto flex flex-col items-center rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant={isGearOpen ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className={cn('relative h-9 w-9 transition-transform duration-200', isGearOpen && 'rotate-45')}
-                  aria-label="Toggle Graph Settings Menu"
-                  onClick={() => {
-                    setIsGearOpen((prev) => !prev);
-                    if (isGearOpen) setActivePanel(null);
-                  }}
-                >
-                  <Settings2 className="h-4 w-4" />
-                  {filterCount > 0 && !isGearOpen && (
-                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                {isGearOpen ? 'Collapse Settings' : 'Expand Graph Settings'}
-              </TooltipContent>
-            </Tooltip>
+      <div className="pointer-events-none absolute right-2 top-2 z-40 flex flex-col items-end gap-1.5 sm:right-4 sm:top-4">
+        {/* 1. Baris Setting: Gear Button & Horizontal Submenu */}
+        <div className="pointer-events-auto flex items-center rounded-lg border border-border/60 bg-card/90 p-1 shadow-md shadow-black/25 backdrop-blur-md transition-all">
+          {/* Horizontal Expanding Options ke arah Kiri (Width 280px max, smooth scroll) */}
+          {isGearOpen && (
+            <div className="mr-1 flex max-w-[calc(100vw-70px)] sm:w-[280px] items-center gap-1 overflow-x-auto overscroll-contain pr-1 border-r border-border/50 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden animate-in fade-in-0 slide-in-from-right-2 duration-150">
+              {/* 1. Search & Filters */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'search' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className={cn('relative h-7 w-7 rounded-md shrink-0 transition-colors', filterCount > 0 && 'text-primary')}
+                    onClick={() => togglePanel('search')}
+                    aria-label="Search and Depth Filters"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    {filterCount > 0 && (
+                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Search & Filters</TooltipContent>
+              </Tooltip>
 
+              {/* 2. Layout Engine */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'layout' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-7 w-7 rounded-md shrink-0 transition-colors"
+                    onClick={() => togglePanel('layout')}
+                    aria-label="Layout Engine"
+                  >
+                    <Network className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Layout & Hierarchy</TooltipContent>
+              </Tooltip>
 
+              {/* 3. Color Engine */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'colors' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-7 w-7 rounded-md shrink-0 transition-colors"
+                    onClick={() => togglePanel('colors')}
+                    aria-label="Color Engine"
+                  >
+                    <Palette className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Color Engine</TooltipContent>
+              </Tooltip>
 
-            {/* Sub-grup Icon Buttons yang muncul ke bawah saat Gear dibuka */}
-            {isGearOpen && (
-              <div className="mt-1 flex flex-col items-center gap-1 border-t border-border/60 pt-1 animate-in fade-in-0 slide-in-from-top-2 duration-200">
-                {/* 1. Search & Filters */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={activePanel === 'search' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className={cn('relative h-8 w-8', filterCount > 0 && 'text-primary')}
-                      onClick={() => togglePanel('search')}
-                      aria-label="Search and Depth Filters"
-                    >
-                      <Search className="h-4 w-4" />
-                      {filterCount > 0 && (
-                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Search & Filters</TooltipContent>
-                </Tooltip>
+              {/* 4. Atmosphere & Effects */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'atmosphere' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-7 w-7 rounded-md shrink-0 transition-colors"
+                    onClick={() => togglePanel('atmosphere')}
+                    aria-label="Atmosphere & Effects"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Atmosphere & Living Canvas</TooltipContent>
+              </Tooltip>
 
-                {/* 2. Layout Engine */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={activePanel === 'layout' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => togglePanel('layout')}
-                      aria-label="Layout Engine"
-                    >
-                      <Network className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Layout & Hierarchy</TooltipContent>
-                </Tooltip>
+              {/* 5. Nodes & Links */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'appearance' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-7 w-7 rounded-md shrink-0 transition-colors"
+                    onClick={() => togglePanel('appearance')}
+                    aria-label="Nodes & Links"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Nodes & Links</TooltipContent>
+              </Tooltip>
 
-                {/* 3. Node Appearance */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={activePanel === 'nodes' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => togglePanel('nodes')}
-                      aria-label="Node Appearance"
-                    >
-                      <Circle className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Node Styling & Glow</TooltipContent>
-                </Tooltip>
+              {/* 6. Global & Stats */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={activePanel === 'global' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-7 w-7 rounded-md shrink-0 transition-colors"
+                    onClick={() => togglePanel('global')}
+                    aria-label="Graph Global & Templates"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Graph Global & Templates</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
 
-                {/* 4. Link & Particles */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={activePanel === 'links' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => togglePanel('links')}
-                      aria-label="Link & Particles"
-                    >
-                      <Link2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Link & Particles</TooltipContent>
-                </Tooltip>
-
-                {/* 5. Physics & Forces */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant={activePanel === 'physics' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => togglePanel('physics')}
-                      aria-label="Physics & Forces"
-                    >
-                      <Zap className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Physics & Forces</TooltipContent>
-                </Tooltip>
-
-                {/* 6. global & Stats */}
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant={activePanel === 'global' ? 'secondary' : 'ghost'}
-          size="icon"
-          className="h-9 w-9"
-          onClick={() => togglePanel('global')}
-        >
-          <Globe className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="left">Graph Global & Templates</TooltipContent>
-    </Tooltip>
-              </div>
-            )}
-                            {/* Expand All / Clear Focus Indicator */}
-    {(collapsedCount > 0 || focused) && (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-primary animate-in fade-in zoom-in-90 duration-150"
-            aria-label="Show everything"
-            onClick={() => {
-              onExpandAll();
-              onClearFocus();
-            }}
-          >
-            <UnfoldVertical className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          Show everything ({collapsedCount} collapsed)
-        </TooltipContent>
-      </Tooltip>
-    )}
-          </div>
-
-          {/* Quick Zoom Actions */}
-          <div className="pointer-events-auto flex flex-col items-center gap-1 rounded-lg border border-border/80 bg-card/95 p-1 shadow-xl backdrop-blur-md">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  aria-label="Zoom to fit"
-                  onClick={() => onSmartZoom('fit')}
-                >
-                  <Frame className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">Zoom to fit</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  aria-label="Zoom to selection"
-                  onClick={() => onSmartZoom('selection')}
-                >
-                  <Focus className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">Zoom to selection</TooltipContent>
-            </Tooltip>
-          </div>
+          {/* Main Gear Toggle Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant={isGearOpen ? 'secondary' : 'ghost'}
+                size="icon"
+                className={cn('relative h-7 w-7 rounded-md shrink-0 transition-transform duration-200', isGearOpen && 'rotate-45')}
+                aria-label="Toggle Graph Settings Menu"
+                onClick={() => {
+                  setIsGearOpen((prev) => !prev);
+                  if (isGearOpen) setActivePanel(null);
+                }}
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                {filterCount > 0 && !isGearOpen && (
+                  <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">
+              {isGearOpen ? 'Collapse Settings' : 'Expand Graph Settings'}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        {/* Panel Pop-up Konten Pengaturan di Kiri Toolbar */}
+        {/* 2. Active Settings Panel (Width 100% simetris dengan Toolbar atas: 280px + gear = ~320px) */}
         {activePanel && (
-          <section className="pointer-events-auto flex max-h-[420px] min-h-[220px] w-[260px] flex-col rounded-lg border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md animate-in fade-in-0 slide-in-from-right-2 duration-150 sm:w-[300px]">
+          <section className="pointer-events-auto flex h-[280px] max-h-[280px] min-h-[280px] w-[min(324px,calc(100vw-32px))] flex-col overflow-hidden rounded-lg border border-border/60 bg-card/95 shadow-lg shadow-black/30 backdrop-blur-md animate-in fade-in-0 slide-in-from-top-1 duration-150">
             {/* Header Panel */}
-            <header className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold capitalize text-foreground">
+            <header className="flex h-7 shrink-0 items-center justify-between border-b border-border/50 px-2.5 bg-muted/20">
+              <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                <span className="truncate text-[11px] font-medium text-foreground tracking-tight">
                   {activePanel === 'search' && 'Search & Depth'}
                   {activePanel === 'layout' && 'Layout Engine'}
-                  {activePanel === 'nodes' && 'Node Appearance'}
-                  {activePanel === 'links' && 'Links & Particles'}
-                  {activePanel === 'physics' && 'Physics & Forces'}
-                  {activePanel === 'global' && 'Graph global'}
+                  {activePanel === 'appearance' && 'Nodes & Links'}
+                  {activePanel === 'colors' && 'Color Engine'}
+                  {activePanel === 'atmosphere' && 'Atmosphere & Effects'}
+                  {activePanel === 'global' && 'Graph Global'}
                 </span>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                className="h-5 w-5 rounded shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label="Close settings panel"
                 onClick={() => setActivePanel(null)}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </Button>
             </header>
 
-            {/* Body Panel dengan Thin Scrollbar */}
-            <div className="flex-1 overflow-y-auto p-3 [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.3)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
+            {/* Body Panel dengan scrollbar halus */}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-2.5 [scrollbar-width:thin] [scrollbar-color:hsl(var(--muted-foreground)/0.2)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40">
               {/* 1. SEARCH & DEPTH PANEL */}
               {activePanel === 'search' && (
                 <div className="space-y-3.5">
@@ -599,7 +550,7 @@ export function GraphWorkspaceControls({
                       value={search}
                       onChange={(e) => onSearchChange(e.target.value)}
                       placeholder="Type title..."
-                      className="h-8 text-xs"
+                      className="h-7 text-xs"
                     />
                   </div>
 
@@ -626,7 +577,7 @@ export function GraphWorkspaceControls({
                       value={contentFilter}
                       onChange={(e) => onContentFilterChange(e.target.value)}
                       placeholder="Match content..."
-                      className="h-8 text-xs"
+                      className="h-7 text-xs"
                     />
                   </div>
 
@@ -636,7 +587,7 @@ export function GraphWorkspaceControls({
                       value={tagFilter}
                       onChange={(e) => onTagFilterChange(e.target.value)}
                       placeholder="#tag..."
-                      className="h-8 text-xs"
+                      className="h-7 text-xs"
                     />
                   </div>
                 </div>
@@ -645,17 +596,93 @@ export function GraphWorkspaceControls({
               {/* 2. LAYOUT ENGINE PANEL */}
               {activePanel === 'layout' && (
                 <div className="space-y-3.5">
+                  {/* Mode Switcher: Mindmap View vs Graph View */}
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Layout Algorithm</Label>
+                    <Label className="text-[11px] text-muted-foreground">View Mode</Label>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-border/60 bg-secondary/30 p-1">
+                      <Button
+                        type="button"
+                        variant={canvasMode === 'mindmap' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className={cn(
+                          "h-7 gap-1.5 text-xs font-medium transition-all",
+                          canvasMode === 'mindmap' && "bg-background text-foreground shadow-sm"
+                        )}
+                        onClick={() => handleModeSwitch('mindmap')}
+                      >
+                        <GitBranch className="h-3.5 w-3.5 text-primary" />
+                        Mindmap View
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={canvasMode === 'graph' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className={cn(
+                          "h-7 gap-1.5 text-xs font-medium transition-all",
+                          canvasMode === 'graph' && "bg-background text-foreground shadow-sm"
+                        )}
+                        onClick={() => handleModeSwitch('graph')}
+                      >
+                        <Network className="h-3.5 w-3.5 text-primary" />
+                        Graph View
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* TAMBAHKAN: Switcher Layout Arrangement (Auto vs Custom) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[11px] text-muted-foreground">Layout Structure</Label>
+                      <span className="text-[10px] text-muted-foreground/70">
+                        {layoutArrangement === 'auto' ? 'Fixed (Anti-overlap)' : 'Freehand Custom'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-border/60 bg-muted/30 p-1">
+                      <Button
+                        type="button"
+                        variant={layoutArrangement === 'auto' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className={cn(
+                          "h-7 gap-1.5 text-xs font-medium transition-all",
+                          layoutArrangement === 'auto' && "bg-background text-foreground shadow-sm"
+                        )}
+                        onClick={() => setLayoutArrangement('auto')}
+                        title="Automated layout: fixed coordinates, prevents overlapping, auto snap-back"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                        Auto
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={layoutArrangement === 'custom' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        className={cn(
+                          "h-7 gap-1.5 text-xs font-medium transition-all",
+                          layoutArrangement === 'custom' && "bg-background text-foreground shadow-sm"
+                        )}
+                        onClick={() => setLayoutArrangement('custom')}
+                        title="Custom layout: free dragging and manual node coordinate placement"
+                      >
+                        <Move className="h-3.5 w-3.5 text-primary" />
+                        Custom
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Layout Algorithm Options */}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">
+                      {canvasMode === 'mindmap' ? 'Mindmap Algorithm' : 'Graph Algorithm'}
+                    </Label>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {(canvasMode === 'graph' ? GRAPH_LAYOUTS : MINDMAP_LAYOUTS).map((item) => {
+                      {(canvasMode === 'mindmap' ? MINDMAP_LAYOUTS : GRAPH_LAYOUTS).map((item) => {
                         const Icon = item.icon;
                         return (
                           <Button
                             key={item.value}
                             type="button"
                             variant={layout === item.value ? 'secondary' : 'outline'}
-                            className="h-9 justify-start px-2 text-xs"
+                            className="h-7 justify-start px-2 text-xs"
                             onClick={() => onLayoutChange(item.value)}
                           >
                             <Icon className="mr-1.5 h-3.5 w-3.5" />
@@ -666,8 +693,9 @@ export function GraphWorkspaceControls({
                     </div>
                   </div>
 
-                  {layout === 'mindmap' && (
-                    <div className="space-y-1.5">
+                  {/* Dynamic Option Khusus Mindmap: Orientation */}
+                  {canvasMode === 'mindmap' && layout === 'mindmap' && (
+                    <div className="space-y-1.5 animate-in fade-in-0 duration-150">
                       <Label className="text-[11px] text-muted-foreground">Orientation</Label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {(['balanced', 'radial'] as MindmapOrientation[]).map((val) => (
@@ -675,7 +703,7 @@ export function GraphWorkspaceControls({
                             key={val}
                             type="button"
                             variant={orientation === val ? 'secondary' : 'outline'}
-                            className="h-8 text-xs capitalize"
+                            className="h-7 text-xs capitalize"
                             onClick={() => onOrientationChange(val)}
                           >
                             {val}
@@ -685,6 +713,7 @@ export function GraphWorkspaceControls({
                     </div>
                   )}
 
+                  {/* Opsi Umum: Zoom-Out Rendering */}
                   <div className="space-y-1.5 border-t border-border/60 pt-2.5">
                     <Label className="text-[11px] text-muted-foreground">Zoom-Out Rendering</Label>
                     <Select
@@ -693,7 +722,7 @@ export function GraphWorkspaceControls({
                         patchEngine({ zoomOutRendering: val as 'optimized' | 'full-detail' })
                       }
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-7 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -706,11 +735,11 @@ export function GraphWorkspaceControls({
                       </SelectContent>
                     </Select>
                     <p className="text-[10px] leading-snug text-muted-foreground">
-                      Keep full detail preserves node cards, labels, and link weight while zooming
-                      out.
+                      Keep full detail preserves node cards, labels, and link weight while zooming out.
                     </p>
                   </div>
 
+                  {/* Opsi Umum: Label Zoom Threshold */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[11px] text-muted-foreground">
                       <span>Label Zoom Threshold</span>
@@ -724,22 +753,47 @@ export function GraphWorkspaceControls({
                       onValueChange={([v]) => patchEngine({ labelZoomThreshold: v })}
                     />
                   </div>
-
-                  <div className="flex items-center justify-between border-t border-border/60 pt-2.5">
-                    <Label className="flex items-center gap-1.5 text-xs">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      Highlight connected path
-                    </Label>
-                    <Switch
-                      checked={highlightPathway}
-                      onCheckedChange={onHighlightPathwayChange}
-                    />
-                  </div>
                 </div>
               )}
 
+
+              {/* COLOR ENGINE PANEL */}
+              {activePanel === 'colors' && (
+                <div className="space-y-3.5">
+                  <ColorEngineControls
+                    hierarchy={config.hierarchy}
+                    nodeConfig={config.nodes}
+                    onHierarchyUpdate={updateHierarchyConfig}
+                    onNodeConfigUpdate={updateNodeConfig}
+                  />
+                </div>
+              )}
+
+              {activePanel === 'atmosphere' && (
+                <AtmosphereControls
+                  atmosphere={mergeAtmosphereConfig(config.atmosphere)}
+                  linkConfig={config.links}
+                  nodeConfig={config.nodes}
+                  onAtmosphereUpdate={(updates) => {
+                    if (leafApi) leafApi.getState().setAtmosphereConfig(updates);
+                    else useGraphStore.getState().updateAtmosphereConfig(updates);
+                  }}
+                  onLinkUpdate={updateLinkConfig}
+                  onNodeUpdate={updateNodeConfig}
+                />
+              )}
+
+              {activePanel === 'appearance' && (
+                <Tabs value={appearanceTab} onValueChange={value => { if (value === 'nodes' || value === 'links') setAppearanceTab(value); }} className="mb-4">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="nodes">Nodes</TabsTrigger>
+                    <TabsTrigger value="links">Links</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+
               {/* 3. NODE APPEARANCE PANEL */}
-              {activePanel === 'nodes' && (
+              {activePanel === 'appearance' && appearanceTab === 'nodes' && (
                 <div className="space-y-2">
                   <PanelSection title="Node Types" defaultOpen>
                     <div className="flex items-center justify-between">
@@ -767,7 +821,7 @@ export function GraphWorkspaceControls({
                           updateNodeConfig({ shape: val as NodeConfig['shape'] })
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -819,74 +873,6 @@ export function GraphWorkspaceControls({
                     )}
                   </PanelSection>
 
-                  <PanelSection title="Hierarchy Colors">
-                    <HierarchyColorControls
-                      hierarchy={config.hierarchy}
-                      onChange={updateHierarchyConfig}
-                    />
-                  </PanelSection>
-
-                  <PanelSection title="Colors & Glow">
-                    <ColorPicker
-                      label="Folder Color"
-                      value={config.nodes.folderColor}
-                      onChange={(val) => updateNodeConfig({ folderColor: val })}
-                    />
-                    <ColorPicker
-                      label="File Color"
-                      value={config.nodes.fileColor}
-                      onChange={(val) => updateNodeConfig({ fileColor: val })}
-                    />
-                    <ColorPicker
-                      label="Selected Color"
-                      value={config.nodes.selectedColor}
-                      onChange={(val) => updateNodeConfig({ selectedColor: val })}
-                    />
-
-                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
-                      <Label className="text-xs">Glowing Nodes</Label>
-                      <Switch
-                        checked={config.nodes.glow}
-                        onCheckedChange={(checked) => updateNodeConfig({ glow: checked })}
-                      />
-                    </div>
-
-                    {config.nodes.glow && (
-                      <div className="space-y-2">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Intensity</span>
-                            <span>{config.nodes.glowIntensity.toFixed(2)}</span>
-                          </div>
-                          <Slider
-                            value={[config.nodes.glowIntensity]}
-                            min={0.1}
-                            max={1}
-                            step={0.05}
-                            onValueChange={([v]) => updateNodeConfig({ glowIntensity: v })}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Pulse Speed</span>
-                            <span>
-                              {config.nodes.glowSpeed === 0
-                                ? 'Static'
-                                : `${config.nodes.glowSpeed.toFixed(1)}x`}
-                            </span>
-                          </div>
-                          <Slider
-                            value={[config.nodes.glowSpeed]}
-                            min={0}
-                            max={3}
-                            step={0.1}
-                            onValueChange={([v]) => updateNodeConfig({ glowSpeed: v })}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </PanelSection>
-
                   <PanelSection title="Labels">
                     <div className="space-y-1.5">
                       <Label className="text-[11px] text-muted-foreground">Labels display</Label>
@@ -921,7 +907,7 @@ export function GraphWorkspaceControls({
                           updateNodeConfig({ labelField: val as NodeConfig['labelField'] })
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -956,7 +942,7 @@ export function GraphWorkspaceControls({
                           updateNodeConfig({ labelFontStyle: val as NodeConfig['labelFontStyle'] })
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1008,7 +994,7 @@ export function GraphWorkspaceControls({
               )}
 
               {/* 4. LINKS & PARTICLES PANEL */}
-              {activePanel === 'links' && (
+              {activePanel === 'appearance' && appearanceTab === 'links' && (
                 <div className="space-y-2">
                   <PanelSection title="Link Types" defaultOpen>
                     <div className="flex items-center justify-between">
@@ -1087,7 +1073,7 @@ export function GraphWorkspaceControls({
                           })
                         }
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1182,149 +1168,11 @@ export function GraphWorkspaceControls({
                     </div>
                   </PanelSection>
 
-                  <PanelSection title="Particle Animations">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Particles Animation</Label>
-                      <Switch
-                        checked={config.links.showParticles}
-                        onCheckedChange={(checked) =>
-                          updateLinkConfig({
-                            showParticles: checked,
-                            ...(checked && config.links.particles < 1 ? { particles: 2 } : {}),
-                            ...(checked && config.links.particleSpeed <= 0
-                              ? { particleSpeed: 0.01 }
-                              : {}),
-                          })
-                        }
-                      />
-                    </div>
 
-                    {config.links.showParticles && (
-                      <div className="space-y-2">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Count / link</span>
-                            <span>{config.links.particles}</span>
-                          </div>
-                          <Slider
-                            value={[config.links.particles]}
-                            min={1}
-                            max={6}
-                            step={1}
-                            onValueChange={([v]) => updateLinkConfig({ particles: v })}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Flow Speed</span>
-                            <span>{config.links.particleSpeed.toFixed(3)}</span>
-                          </div>
-                          <Slider
-                            value={[config.links.particleSpeed]}
-                            min={0.002}
-                            max={0.05}
-                            step={0.002}
-                            onValueChange={([v]) => updateLinkConfig({ particleSpeed: v })}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] text-muted-foreground">
-                            <span>Particle Width</span>
-                            <span>{config.links.particleWidth}px</span>
-                          </div>
-                          <Slider
-                            value={[config.links.particleWidth]}
-                            min={1}
-                            max={10}
-                            step={0.5}
-                            onValueChange={([v]) => updateLinkConfig({ particleWidth: v })}
-                          />
-                        </div>
-                        <ColorPicker
-                          label="Particle Color"
-                          value={config.links.particleColor}
-                          onChange={(val) => updateLinkConfig({ particleColor: val })}
-                        />
-                      </div>
-                    )}
-                  </PanelSection>
                 </div>
               )}
 
-              {/* 5. PHYSICS & FORCES PANEL */}
-              {activePanel === 'physics' && (
-                <div className="space-y-3.5">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="flex-1 gap-1.5 text-xs"
-                      onClick={requestReheat}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Reheat
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-1.5 text-xs"
-                      onClick={requestStop}
-                    >
-                      <Pause className="h-3.5 w-3.5" />
-                      Freeze
-                    </Button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">DAG Direction</Label>
-                    <Select
-                      value={config.forces.dagMode}
-                      onValueChange={(val: any) => updateForceConfig({ dagMode: val })}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAG_MODES.map((d) => (
-                          <SelectItem key={d.value} value={d.value} className="text-xs">
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Repulsion</span>
-                      <span>{config.forces.chargeStrength}</span>
-                    </div>
-                    <Slider
-                      value={[config.forces.chargeStrength]}
-                      min={-1200}
-                      max={-20}
-                      step={20}
-                      onValueChange={([v]) => updateForceConfig({ chargeStrength: v })}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>Link Distance</span>
-                      <span>{config.forces.linkDistance}px</span>
-                    </div>
-                    <Slider
-                      value={[config.forces.linkDistance]}
-                      min={20}
-                      max={400}
-                      step={5}
-                      onValueChange={([v]) => updateForceConfig({ linkDistance: v })}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 6. GRAPH GLOBAL & TEMPLATES PANEL */}
+              {/* 5. GRAPH GLOBAL & TEMPLATES PANEL */}
               {activePanel === 'global' && (
                 <div className="space-y-4">
                   {/* Bagian A: Simpan Template Baru */}
@@ -1338,12 +1186,12 @@ export function GraphWorkspaceControls({
                         value={templateName}
                         onChange={(e) => setTemplateName(e.target.value)}
                         placeholder="Template name (e.g. Focus Dark)..."
-                        className="h-8 text-xs bg-background/50"
+                        className="h-7 text-xs bg-background/50"
                       />
                       <Button
                         type="submit"
                         size="sm"
-                        className="h-8 shrink-0 px-2.5 text-xs gap-1"
+                        className="h-7 shrink-0 px-2.5 text-xs gap-1"
                         disabled={!templateName.trim()}
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -1421,7 +1269,7 @@ export function GraphWorkspaceControls({
                                       className={cn(
                                         'h-6 w-6',
                                         isDefault
-                                          ? 'text-amber-400 hover:text-amber-500'
+                                          ? 'text-primary hover:text-amber-500'
                                           : 'text-muted-foreground hover:text-foreground'
                                       )}
                                       onClick={() => handleToggleDefault(tmpl)}
@@ -1527,6 +1375,65 @@ export function GraphWorkspaceControls({
             </div>
           </section>
         )}
+
+        {/* 3. Quick Zoom Group (Otomatis berada di bawah Setting Bar, dan ikut terdorong turun jika Active Panel terbuka) */}
+        <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-card/90 p-0.5 shadow-md shadow-black/25 backdrop-blur-md transition-all">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                aria-label="Zoom to fit"
+                onClick={() => onSmartZoom('fit')}
+              >
+                <Frame className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">Zoom to fit</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                aria-label="Zoom to selection"
+                onClick={() => onSmartZoom('selection')}
+              >
+                <Focus className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">Zoom to selection</TooltipContent>
+          </Tooltip>
+
+          {/* Dynamic Expand All / Clear Focus Button */}
+          {(collapsedCount > 0 || focused) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-md text-primary border-t border-border/40 pt-0.5 animate-in fade-in zoom-in-90 duration-150"
+                  aria-label="Show everything"
+                  onClick={() => {
+                    onExpandAll();
+                    onClearFocus();
+                  }}
+                >
+                  <UnfoldVertical className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs">
+                Show everything ({collapsedCount} collapsed)
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );

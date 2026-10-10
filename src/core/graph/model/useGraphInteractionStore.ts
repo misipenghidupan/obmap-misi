@@ -23,10 +23,13 @@ import {
   type LayoutMode,
   type MindmapLayoutMode,
   type MindmapOrientation,
+  type TimelineStructure,
 } from './graphTypes';
 
 export type TransitionStatus = 'idle' | 'animating';
 export type HighlightMode = 'off' | 'pathway';
+export type LayoutArrangement = 'auto' | 'custom';
+
 
 /** Legacy persisted names from the worker engine. */
 const LEGACY_MODES: Record<string, LayoutMode> = {
@@ -46,6 +49,7 @@ export interface GraphInteractionState {
   layoutMode: LayoutMode;
   canvasMode: CanvasMode;
   lastGraphLayout: GraphLayoutMode;
+  layoutArrangement: LayoutArrangement; 
   lastMindmapLayout: MindmapLayoutMode;
   orientation: MindmapOrientation;
   highlightMode: HighlightMode;
@@ -55,6 +59,7 @@ export interface GraphInteractionState {
   focusedRootId: string | null;
   transitionStatus: TransitionStatus;
   simulationCommand: { type: 'reheat' | 'stop'; nonce: number } | null;
+  timelineStructure: TimelineStructure;
   subtreeLayoutOverrides: Record<string, MindmapLayoutMode>;
   branchColorOverrides: Record<string, string>;
 
@@ -65,6 +70,7 @@ export interface GraphInteractionState {
 
   setLayoutMode: (mode: LayoutMode) => void;
   /** Switch family; restores the last layout used in that family. */
+  setLayoutArrangement: (arrangement: LayoutArrangement) => void; 
   setCanvasMode: (mode: CanvasMode) => void;
   setOrientation: (orientation: MindmapOrientation) => void;
   setHighlightMode: (mode: HighlightMode) => void;
@@ -89,6 +95,7 @@ const layoutPatch = (layoutMode: LayoutMode): Partial<GraphInteractionState> => 
 const creator: StateCreator<GraphInteractionState> = (set) => ({
   layoutMode: 'mindmap',
   canvasMode: 'mindmap',
+  layoutArrangement: 'auto',
   lastGraphLayout: 'free-force',
   lastMindmapLayout: 'mindmap',
   orientation: 'balanced',
@@ -99,7 +106,8 @@ const creator: StateCreator<GraphInteractionState> = (set) => ({
   focusedRootId: null,
   transitionStatus: 'idle',
   simulationCommand: null,
-    subtreeLayoutOverrides: {},
+  timelineStructure: 'off-axis',
+  subtreeLayoutOverrides: {},
   branchColorOverrides: {},
 
   setSubtreeLayoutOverride: (nodeId, layout) =>
@@ -129,6 +137,7 @@ const creator: StateCreator<GraphInteractionState> = (set) => ({
         ? {}
         : layoutPatch(canvasMode === 'graph' ? state.lastGraphLayout : state.lastMindmapLayout)
     ),
+  setLayoutArrangement: (layoutArrangement) => set({ layoutArrangement }),
   setOrientation: (orientation) => set({ orientation }),
   setHighlightMode: (highlightMode) => set({ highlightMode }),
   toggleCollapsed: (id) =>
