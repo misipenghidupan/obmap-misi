@@ -567,15 +567,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       zoomRef.current = globalScale;
 
       // 1. Living Canvas Atmosphere (Cosmic Dust & Nebula Grid)
-      // Transform context ke koordinat layar penuh
+      // Gunakan resolusi fisik aktual canvas (ctx.canvas.width & height) agar memenuhi layar penuh di HP / Retina
       const atmosphere = (graphConfig as any).atmosphere ?? { cosmicParticles: 35, cosmicSpeed: 1 };
-      if (atmosphere.cosmicParticles > 0 && size.width > 0 && size.height > 0) {
+      const canvasW = ctx.canvas?.width || size.width;
+      const canvasH = ctx.canvas?.height || size.height;
+      if (atmosphere.cosmicParticles > 0 && canvasW > 0 && canvasH > 0) {
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         drawCosmicAtmosphere(
           ctx,
-          size.width,
-          size.height,
+          canvasW,
+          canvasH,
           performance.now() / 1000,
           {
             intensity: atmosphere.cosmicParticles,

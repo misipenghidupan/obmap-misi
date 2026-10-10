@@ -790,8 +790,8 @@ export function GraphWorkspaceControls({
               {activePanel === 'appearance' && (
                 <Tabs value={appearanceTab} onValueChange={value => { if (value === 'nodes' || value === 'links') setAppearanceTab(value); }} className="mb-4">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="nodes">Nodes</TabsTrigger>
-                    <TabsTrigger value="links">Links</TabsTrigger>
+                    <TabsTrigger value="nodes" className="h-7 text-xs">Nodes</TabsTrigger>
+                    <TabsTrigger value="links" className="h-7 text-xs">Links</TabsTrigger>
                   </TabsList>
                 </Tabs>
               )}
@@ -893,14 +893,6 @@ export function GraphWorkspaceControls({
                           </Button>
                         ))}
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Show Labels</Label>
-                      <Switch
-                        checked={config.nodes.showLabels}
-                        onCheckedChange={(checked) => updateNodeConfig({ showLabels: checked })}
-                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -1377,70 +1369,69 @@ export function GraphWorkspaceControls({
                 </div>
               )}
             </div>
-          </section>
+           </section>
         )}
+      </div> {/* <-- TUTUP kontainer kiri-bawah di sini agar mandiri */}
 
       {/* ========================================================================= */}
       {/* 2. ZOOM GROUP BUTTONS: DI BAGIAN BAWAH KANAN (BOTTOM-RIGHT)               */}
       {/* ========================================================================= */}
-        <div className="pointer-events-none absolute bottom-2 right-2 z-30 flex flex-col items-center gap-1 sm:bottom-4 sm:right-4">
-          <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-card/90 p-0.5 shadow-md shadow-black/25 backdrop-blur-md transition-all">
+      <div className="pointer-events-none absolute bottom-2 right-2 z-30 flex flex-col items-center gap-1 sm:bottom-4 sm:right-4">
+        <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border border-border/60 bg-card/90 p-0.5 shadow-md shadow-black/25 backdrop-blur-md transition-all">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                aria-label="Zoom to fit"
+                onClick={() => onSmartZoom('fit')}
+              >
+                <Frame className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">Zoom to fit</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md"
+                aria-label="Zoom to selection"
+                onClick={() => onSmartZoom('selection')}
+              >
+                <Focus className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">Zoom to selection</TooltipContent>
+          </Tooltip>
+
+          {(collapsedCount > 0 || focused) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 rounded-md"
-                  aria-label="Zoom to fit"
-                  onClick={() => onSmartZoom('fit')}
+                  className="h-7 w-7 rounded-md text-primary border-t border-border/40 pt-0.5 animate-in fade-in zoom-in-90 duration-150"
+                  aria-label="Show everything"
+                  onClick={() => {
+                    onExpandAll();
+                    onClearFocus();
+                  }}
                 >
-                  <Frame className="h-3.5 w-3.5" />
+                  <UnfoldVertical className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left" className="text-xs">Zoom to fit</TooltipContent>
+              <TooltipContent side="left" className="text-xs">
+                Show everything ({collapsedCount} collapsed)
+              </TooltipContent>
             </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md"
-                  aria-label="Zoom to selection"
-                  onClick={() => onSmartZoom('selection')}
-                >
-                  <Focus className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left" className="text-xs">Zoom to selection</TooltipContent>
-            </Tooltip>
-
-            {/* Dynamic Expand All / Clear Focus Button */}
-            {(collapsedCount > 0 || focused) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md text-primary border-t border-border/40 pt-0.5 animate-in fade-in zoom-in-90 duration-150"
-                    aria-label="Show everything"
-                    onClick={() => {
-                      onExpandAll();
-                      onClearFocus();
-                    }}
-                  >
-                    <UnfoldVertical className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left" className="text-xs">
-                  Show everything ({collapsedCount} collapsed)
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </TooltipProvider>
